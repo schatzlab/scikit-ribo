@@ -1,0 +1,27 @@
+#!/usr/bin/env python
+import os
+import sys
+from subprocess import call # call runs an external program and waits for it to quit
+# test1.sam
+global samtools
+samtools="../samtools-1.2/samtools"
+
+class Extract_Uniqe_Alignment:
+   aaa="../samtools-1.2/samtools"
+
+   def __init__(self, in_bam, out_bam):
+      self.in_bam  = in_bam
+      self.out_bam = out_bam
+   
+   def samtools_filter_mapq(self):
+      call(samtools view -bq 10 self.in_bam > self.out_bam, shell=True)
+       #call("%(Extract_Uniqe_Alignment.aaa)s view -bq 10 self.in_bam > self.out_bam" % locals()  , shell=True )
+#       print "Total Employee %d" % Employee.empCount
+
+#   def displayEmployee(self):
+#      print "Name : ", self.name,  ", Salary: ", self.salary
+
+# call("%s view -bq 10 test1.bam > test1.unique.bam"  % (samtools) , shell=True )
+
+test1 = Extract_Uniqe_Alignment("test1.bam", "test1.uni.bam")
+test1.samtools_filter_mapq()
