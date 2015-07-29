@@ -1,4 +1,5 @@
-# *photon*, a framework for joint analysis of ribosome profilling and rnaseq data
+# *photon*, 
+## a framework for joint analysis of ribosome profilling and rnaseq data
 ## user manual and guide
 
 --------
