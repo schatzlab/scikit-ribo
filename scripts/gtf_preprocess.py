@@ -23,7 +23,7 @@ class sort_gtf:
       self.out_gtf = out_gtf
 
    def sort_gtf_by_coordinate(self):
-      cmd = "sort -k1,1 -k 4,4n -k 5,5n {0} > {1}".format( self.in_gtf, self.out_gtf )
+      cmd = "sort -k1,1V -k 4,4g -k 5,5g {0} > {1}".format( self.in_gtf, self.out_gtf )
       print "[execute]\t" + cmd      
       os.system( cmd )
 ## extract the gtf records for start codon location
