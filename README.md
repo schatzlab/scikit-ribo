@@ -1,5 +1,5 @@
-# *Photon* 
-A framework for joint analysis of ribosome profilling and RNAseq data
+# *scikit-ribo* 
+A scikit framework for joint analysis of ribosome profilling and RNAseq data
 
 --------
 
