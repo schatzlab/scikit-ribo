@@ -24,7 +24,7 @@ class sort_gtf:
 
    def sort_gtf_by_coordinate(self):
       cmd = "sort -k1,1V -k 4,4g -k 5,5g {0} > {1}".format( self.in_gtf, self.out_gtf )
-      print "[execute]\t" + cmd      
+      print ("[execute]\t" + cmd)
       os.system( cmd )
 ## extract the gtf records for start codon location
 class extract_startcodon_location:
@@ -34,7 +34,7 @@ class extract_startcodon_location:
     
    def grep_startcodon(self):
       cmd = "grep 'start_codon' {0} > {1}".format( self.in_gtf, self.out_gtf )
-      print "[execute]\t" + cmd      
+      print ("[execute]\t" + cmd)
       os.system( cmd )
 
 ## the main process
@@ -53,7 +53,7 @@ if __name__ == '__main__':
     
     ## process the file if the input files exist
     if (args.i!=None) & (args.sort!=None) & (args.start!=None):
-        print "[status]\tprocessing the input file: " + args.i
+        print ("[status]\tprocessing the input file: " + args.i)
         
         sorted_gtf = sort_gtf( args.i, args.sort )
         sorted_gtf.sort_gtf_by_coordinate()
@@ -61,5 +61,5 @@ if __name__ == '__main__':
         startcodon.grep_startcodon()
         
     else:
-        print "[error]\tmissing argument"
+        print ("[error]\tmissing argument")
         parser.print_usage() 
