@@ -17,7 +17,6 @@ import argparse
 import pysam
 import pandas as pd
 from collections import defaultdict
-# import cmd
 
 class get_uniq_aln:
     ''' define a class for extracting alignment based on MAPQ (>10)
@@ -28,9 +27,9 @@ class get_uniq_aln:
         self.user_mapq = int(user_mapq)
 
     def filter_by_mapq(self):
-        self.samfile      = pysam.AlignmentFile(self.in_bam, "rb")
+        self.samfile = pysam.AlignmentFile(self.in_bam, "rb")
         self.uniq_mappers = pysam.AlignmentFile(self.out_bam, "wb", template=self.samfile)
-    
+
         if self.user_mapq > 10:
             mapq = self.user_mapq
         else:
@@ -39,12 +38,12 @@ class get_uniq_aln:
         for read in self.samfile.fetch():
             if read.mapping_quality > mapq:
                 self.uniq_mappers.write(read)
-
-        # unique_mappers.close()
-        # samfile.close()
+        
         return (self.samfile)
         print ("[execute]\t" + "filter by mapq of " + str(mapq) )
-
+        unique_mappers.close()
+        samfile.close()
+        
 class get_aln_info:
     ''' prepare a summary pandas table for alignment
     '''
@@ -57,17 +56,16 @@ class get_aln_info:
         hdl = list(dict())
         for read in self.in_bam.fetch():    
             hdl.append({'chr': self.in_bam.getrname(read.reference_id) , 'start': read.reference_start, 'end': read.reference_end, 'len':read.query_length, 'seq':read.query_sequence})
-        
-        hdl_df = pd.DataFrame(hdl,columns=['chr', 'start', 'end', 'len','seq'])
 
+        hdl_df = pd.DataFrame(hdl,columns=['chr', 'start', 'end', 'len','seq'])
+        print (hdl_df)
         return (hdl_df)
-        
         # bed = pysam.asBed(self.bed)
         #i=0
         #while i < fasta.nreferences:
         #    print(self.in_bam.getrname(i))
         #    i+=1   
-        
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", help="input bam file")
@@ -84,15 +82,12 @@ if __name__ == '__main__':
 
     ## process the file if the input files exist
     if (args.i!=None) & (args.b!=None) & (args.q!=None) & (args.o!=None) :
-        
         print ("[status]\tprocessing the input bam file: " + args.i)
         unique_mappers = get_uniq_aln( args.i, args.q, args.o)
         unique_mappers.filter_by_mapq()
-        
+
         get_aln = get_aln_info(unique_mappers.samfile,args.b)
         get_aln.get_chr()
-        
-        
     else:
         print ("[error]\tmissing argument")
         parser.print_usage() 
