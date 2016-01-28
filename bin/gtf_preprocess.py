@@ -36,10 +36,9 @@ class gtf2bed:
         ''' sort by coordinates '''
         self.start_sort = self.start.sort()
 
-        
         ''' save the sorted start codon records to a bed file'''
-        self.fn = self.in_gtf.strip( '.gtf' )
-        self.out_bed = self.start_sort.each(gff2bed).saveas(self.fn + '.sort.start.bed') # , trackline='track name=test')
+        # self.fn = self.in_gtf.strip( '.gtf' )
+        # self.out_bed = self.start_sort.each(gff2bed).saveas(self.fn + '.sort.start.bed') # , trackline='track name=test')
 
 ## the main process
 if __name__ == '__main__':

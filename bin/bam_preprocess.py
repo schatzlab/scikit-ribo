@@ -14,10 +14,12 @@
 import os
 import sys
 import argparse
+import multiprocessing
 import pybedtools as pbt
 import pysam
 import pandas as pd
 from collections import defaultdict
+from gtf_preprocess import *
 
 ## ----------------------------------------
 ## class
@@ -58,8 +60,8 @@ class Get_Aln_Info:
 
     def make_bedtool(self):
          self.bt_hdl = pbt.BedTool(self.pysam_hdl)
-         print(self.pysam_hdl)
-         print(self.bt_hdl)
+         # print(self.pysam_hdl)
+         # print(self.bt_hdl)
          
     def get_chr(self):
         hdl = list(dict())
@@ -73,7 +75,7 @@ class Get_Aln_Info:
 
         hdl_df = pd.DataFrame(hdl, columns = ['chr', 'start', 'end', 'len','cigar','seq'])
 
-        print(len(hdl_df.cigar))
+        # print(len(hdl_df.cigar))
         return(hdl_df)
  
 ## ----------------------------------------
@@ -105,6 +107,9 @@ if __name__ == '__main__':
 
         gen_aln = Get_Aln_Info(fetch_aln.pysam_hdl, args.b)
         gen_aln.make_bedtool()
+
+        run = gtf2bed(args.b)
+        run.__call__()
         
     else:
         print ("[error]\tmissing argument")
