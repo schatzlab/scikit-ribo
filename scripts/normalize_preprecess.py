@@ -12,18 +12,11 @@
 ## ----------------------------------------
 
 import sys
+import argparse
 import numpy as np
 
-def usage():
-    """
-    Help message.
-    """
-    sys.stderr.write('Usage:' + '\n' + 'python normalize.py <Count File>' + '\n')
-    sys.stderr.write('Note: please calculate library size for RNA-Seq and ribosome footprint separately!' + '\n')
-
 def lib_size(countNdarray):
-    """ Calculating library size.
-    
+    """ Calculate normalization factor    
     @args countNdarray: read count data
     @type countNdarray: numpy array
     """
@@ -44,22 +37,34 @@ def lib_size(countNdarray):
 
     return librarySizes
 
+## the main process
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-i", help="input count file")
+    parser.add_argument("-o", help="output file")
 
-    if len(sys.argv) != 2:
-        usage()
+    ## check if there is any argument
+    if len(sys.argv) <= 1:
+        parser.print_usage()
+        sys.exit(1)
     else:
-        print ('*'*25)
+        args = parser.parse_args()
 
-        with open(sys.argv[1], 'r') as FileIn:
+    ## process the file if the input files exist
+    if (args.i!=None) & (args.o!=None):  # & (args.sort!=None) & (args.start!=None):
+        print ("[status]\tprocessing the input file: " + args.i)
+
+        with open(args.i, 'r') as FileIn:
             header = np.array(FileIn.readline().strip().split('\t'))
 
-        count = np.loadtxt(sys.argv[1], dtype=int, delimiter='\t', skiprows=1, usecols=range(1, header.size))
+        count = np.loadtxt(args.i, dtype=int, delimiter='\t', skiprows=1, usecols=range(1, header.size))
 
-        print ('Read input files: Done.\n%i Genes.' % count[:, 0].size)
-        print ('*'*25)
+        print ('[summary]\tTotal number of records: %i' % count[:, 0].size)
         libSizes = lib_size(count)
-        print ('Library size:')
         np.set_printoptions(precision=3)
         print (header[1:])
-        print (libSizes)
+        print ("[summary]\tNormalization factors:", libSizes)
+
+    else:
+        print ("[error]\tmissing argument")
+        parser.print_usage()
