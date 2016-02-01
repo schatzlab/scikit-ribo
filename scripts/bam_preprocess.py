@@ -75,7 +75,6 @@ class Get_Aln_Info:
 
         hdl_df = pd.DataFrame(hdl, columns = ['chr', 'start', 'end', 'len','cigar','seq'])
 
-        # print(len(hdl_df.cigar))
         return(hdl_df)
  
 ## ----------------------------------------
@@ -108,8 +107,8 @@ if __name__ == '__main__':
         gen_aln = Get_Aln_Info(fetch_aln.pysam_hdl, args.b)
         gen_aln.make_bedtool()
 
-        run = gtf2bed(args.b)
-        run.__call__()
+        # run = gtf2bed(args.b)
+        # run.__call__()
         
     else:
         print ("[error]\tmissing argument")
