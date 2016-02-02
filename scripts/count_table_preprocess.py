@@ -17,25 +17,22 @@ import sys
 import pandas as pd
 import functools
 
-class merge_count:
+class MergeCount:
     ''' define a class for merging read count tables
     '''
     def __init__(self, in_list, out_fn):
         self.in_list = in_list
         self.out_fn = out_fn
         
-    def __run__(self):
-        output_fn = self.out_fn 
-        fileList = self.in_list
+    def merge(self):
         fileDict = {}
-
-        for fl in fileList:
+        for fl in self.in_list:
             fileDict[fl] = pd.io.parsers.read_table(fl, sep='\t')
 
         first_col_id = str((list(fileDict.values())[0].columns.values[0]))
         func_merge = functools.partial(pd.merge, on = first_col_id, how='inner')
         merge_df = functools.reduce(func_merge, fileDict.values())
-        merge_df.to_csv(output_fn, sep='\t',index=False)
+        merge_df.to_csv(self.out_fn, sep='\t',index=False)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -52,8 +49,10 @@ if __name__ == '__main__':
     ## process the file if the input files exist
     if (args.i!=None) & (args.o!=None):
         print ("[status]\tProcessing the input file..."  )
-        merge_ops = merge_count(args.i,args.o)
-        merge_ops.__run__()
+        in_list = args.i
+        out_fn = args.o
+        table_obj = MergeCount(in_list, out_fn)
+        table_obj.merge()
         print ("[status]\tFinshed."  )
 
     else:

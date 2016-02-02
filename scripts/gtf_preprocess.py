@@ -8,7 +8,7 @@
 ## author: Han Fang 
 ## contact: hanfang.cshl@gmail.com
 ## website: hanfang.github.io
-## date: 7/24/2015
+## date: 1/28/2016
 ## ----------------------------------------
 
 import os
@@ -18,7 +18,7 @@ import argparse
 import pybedtools as pbt
 from pybedtools.featurefuncs import gff2bed
 
-class gtf2bed:
+class Gtf2Bed:
     ''' class to sort and get start codon from a gtf file '''
     def __init__(self, in_gtf): 
         self.in_gtf = in_gtf
@@ -26,7 +26,7 @@ class gtf2bed:
         self.start = None
         self.out_bed = None
 
-    def __call__(self):
+    def convert(self):
         ''' create a bedtool object '''
         self.bedtool = pbt.BedTool(self.in_gtf)
         
@@ -55,8 +55,9 @@ if __name__ == '__main__':
     ## process the file if the input files exist
     if (args.i!=None):  # & (args.sort!=None) & (args.start!=None):
         print ("[status]\tprocessing the input file: " + args.i)
-        run = gtf2bed(args.i)
-        run.__call__()
+        input_fl = args.i
+        bt_obj = Gtf2Bed(input_fl)
+        bt_obj.convert()
         
     else:
         print ("[error]\tmissing argument")

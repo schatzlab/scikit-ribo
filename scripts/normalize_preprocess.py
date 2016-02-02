@@ -17,23 +17,30 @@ import numpy as np
 from scipy.stats.mstats import gmean
 np.set_printoptions(precision=3)
 
-def norm_geo(input_array):
-    """ Calculate normalization factor
-    """
-    if np.any(input_array < 0, axis=None):
-        sys.stderr.write('Error: negative value(s) detected.\n')
-        sys.exit(1)
+class NormGeo:
+    ''' define a class for calculating the normalization factor
+    '''
+    def __init__(self, input):
+        self.in_array = input
+        
+    def normalize(self):
+        input_array = self.in_array
+        
+        if np.any(input_array < 0, axis=None):
+            sys.stderr.write('Error: negative value(s) detected.\n')
+            sys.exit(1)
 
-    ## add one to the connt and calculate geometric mean
-    plus1_array = input_array.copy() + 1
-    geo_means = gmean(plus1_array, axis=1 )
-    ## initiate a array for normailization factors
-    norm_factor = np.zeros(input_array.shape[1])
+        ## add one to the connt and calculate geometric mean
+        plus1_array = input_array.copy() + 1
+        geo_means = gmean(plus1_array, axis=1 )
+        
+        ## initiate a array for normailization factors
+        norm_factor = np.zeros(input_array.shape[1])
 
-    for i in range(input_array.shape[1]):
-        idx = input_array[:, i] > 0
-        norm_factor[i] = np.median(input_array[idx, i] / geo_means[idx])
-    return norm_factor
+        for i in range(input_array.shape[1]):
+            idx = input_array[:, i] > 0
+            norm_factor[i] = np.median(input_array[idx, i] / geo_means[idx])
+        return norm_factor
 
 ## the main process
 if __name__ == '__main__':
@@ -64,7 +71,8 @@ if __name__ == '__main__':
         print ('[summary]\tTotal number of genes: %i' % cnt_array[:, 0].size)
 
         ## Calculate the normalization factor for each sample
-        norm_factor_list = norm_geo(cnt_array)
+        norm_obj = NormGeo(cnt_array)
+        norm_factor_list = norm_obj.normalize()
 
         print ("[summary]\t" + "\t".join(fl_header[1:]))
         print ("[summary]\tNormalization factors:", norm_factor_list)

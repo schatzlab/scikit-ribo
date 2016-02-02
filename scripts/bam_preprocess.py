@@ -8,7 +8,7 @@
 ## author: Han Fang 
 ## contact: hanfang.cshl@gmail.com
 ## website: hanfang.github.io
-## date: 7/24/2015
+## date: 1/28/2016
 ## ----------------------------------------
 
 import os
@@ -24,7 +24,7 @@ from gtf_preprocess import *
 ## ----------------------------------------
 ## class
 ## ----------------------------------------
-class Get_Uniq_Aln:
+class GetUniqAln:
     ''' define a class for extracting alignment based on MAPQ (>10)
     '''
     def __init__(self, in_bam_fn, user_mapq, out_bam_fn):
@@ -50,7 +50,7 @@ class Get_Uniq_Aln:
         pysam_ftd.close()
         pysam_hdl.close()
         
-class Get_Aln_Info:
+class GetAlnInfo:
     ''' prepare a summary pandas table for alignment
     '''
     def __init__(self, pysam_hdl, bed): # , aln_info):
@@ -101,10 +101,15 @@ if __name__ == '__main__':
         args.o!=None) :
         
         print ("[status]\tprocessing the input bam file: " + args.i)
-        fetch_aln = Get_Uniq_Aln(args.i, args.q, args.o)
+        in_bam_fn = args.i
+        user_mapq = args.q
+        out_bam_fn = args.o
+        
+        fetch_aln = GetUniqAln(in_bam_fn, user_mapq, out_bam_fn)
         fetch_aln.filter_by_mapq()
-
-        gen_aln = Get_Aln_Info(fetch_aln.pysam_hdl, args.b)
+        
+        bed_fl = args.b
+        gen_aln = GetAlnInfo(fetch_aln.pysam_hdl, bed_fl)
         gen_aln.make_bedtool()
 
         # run = gtf2bed(args.b)
