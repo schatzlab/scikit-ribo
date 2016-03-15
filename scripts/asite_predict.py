@@ -28,10 +28,6 @@ from sklearn.preprocessing import label_binarize
 from sklearn.multiclass import OneVsRestClassifier
 from sklearn.grid_search import GridSearchCV
 
-# from collections import defaultdict
-# from gtf_preprocess import *
-# import multiprocessing
-
 class VisualizeAsite:
     ''' define a class for plotting a-site location distribution
     '''
@@ -85,10 +81,8 @@ class TrainModel:
         ''' define a class for plotting multi-class roc curve
         '''
 
-        self.clf = linear_model.LogisticRegression(C=10000, solver="lbfgs")
-        self.OVR_clf = OneVsRestClassifier(self.clf)
-
         # shuffle and split training and test sets
+        self.OVR_clf = OneVsRestClassifier(self.clf)
         self.y = label_binarize(self.y, classes=[12,13,14,15,16,17,18])
         n_classes = self.y.shape[1]
         X_train, X_test, y_train, y_test = train_test_split(self.X, self.y, test_size=.5, random_state=0)
@@ -154,7 +148,7 @@ if __name__ == '__main__':
 
         print("[execute]\tperform cross validation on the training data")
         model = TrainModel(asite_loc)
-        # model.fit()
+        model.fit()
         model.roc_curve()
 
     else:
