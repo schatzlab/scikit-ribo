@@ -37,7 +37,12 @@ class VisualizeAsite:
 
     def plot(self):
         sns.set(font_scale=2)
-        g0 = sns.FacetGrid(self.asite_df, row="offset", col="read_length", margin_titles=True , col_order= list(range(25,36)), row_order= list(range(3))) # col_order= [26,28,32]
+        g0 = sns.FacetGrid(self.asite_df,
+                           row="offset",
+                           col="read_length",
+                           margin_titles=True,
+                           col_order= list(range(25,36)),
+                           row_order= list(range(3)))
         bins = np.linspace(12, 21, 10)
         g0.map(plt.hist, "a_site", color="steelblue", bins=bins, lw=0,normed=True)
         g0.set(xticks=[12,15,18,21])
@@ -128,7 +133,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", help="input a-site file")
     #parser.add_argument("-q", help="minimum mapq allowed", default=10, type=int)
-    #parser.add_argument("-o", help="output bam file")
 
     ## check if there is any argument
     if len(sys.argv) <= 1:
