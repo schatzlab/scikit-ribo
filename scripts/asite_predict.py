@@ -27,6 +27,8 @@ from sklearn.cross_validation import train_test_split
 from sklearn.preprocessing import label_binarize
 from sklearn.multiclass import OneVsRestClassifier
 from sklearn.grid_search import GridSearchCV
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.feature_selection import SelectFromModel
 
 class VisualizeAsite:
     ''' define a class for plotting a-site location distribution
@@ -60,27 +62,47 @@ class TrainModel:
         self.X = np.array( pd.get_dummies( object.asite_df[self.df_colnames] ))
         self.y = np.array(object.asite_df["a_site"])
 
-    def fit(self):
-        poly = preprocessing.PolynomialFeatures(2)
-        poly.fit_transform(self.X)
-        # clf = svm.SVC()
-        
+    def rf_fit(self):
+
+        ## feature selection
+        self.clf = RandomForestClassifier(max_features=None, n_jobs=-1)
+        self.clf = self.clf.fit(self.X, self.y)
+        self.importances = self.clf.feature_importances_
+        transformer = SelectFromModel(self.clf, prefit=True, threshold=0.05)
+        self.selected_X = transformer.transform(self.X)
+
+        ## cross validation
+        scores = cross_validation.cross_val_score(self.clf, self.selected_X, self.y, cv=10)
+        print("[status]\tAccuracy: %0.3f (+/- %0.3f)" % (scores.mean(), scores.std() * 2))
+
+    def rf_importance(self):
+        std = np.std([tree.feature_importances_ for tree in self.clf.estimators_],    axis=0)
+        indices = np.argsort(self.importances)[::-1]
+
+        # Plot the feature importances of the classifier
+        plt.figure()
+        plt.title("Feature importances")
+        plt.bar(range(self.X.shape[1]), self.importances[indices],
+            color="r", yerr=std[indices], align="center")
+        plt.xticks(range(self.X.shape[1]), indices)
+        plt.xlim([-1, 10])
+        plt.ylim([0, 1])
+        plt.gcf()
+        plt.savefig(asite_fn + ".feature_importances.pdf", facecolor="white")
+
+    def svm_fit(self):
+
         ## grid search
-        self.clf = linear_model.LogisticRegression()
+        self.clf = svm.SVC()
         param_grid = [ { 'C': [ 0.01, 0.1, 1, 10, 100, 1000, 10000] } ]
         self.clf_gs = GridSearchCV(estimator=self.clf, param_grid=param_grid, n_jobs=-1)
         self.clf_gs.fit(self.X, self.y)
         print("[status]\t best estimator parameters: c=", self.clf_gs.best_estimator_.C)
 
         ## model fitting and cross validation
-        self.clf = linear_model.LogisticRegression( C=self.clf_gs.best_estimator_.C,
-                                                    solver="lbfgs"
-                                                    )
-        
-        # self.clf = linear_model.LogisticRegressionCV(n_jobs=-1, cv=10)
-        scores = cross_validation.cross_val_score(self.clf, self.X, self.y, cv=10)
-        print( self.clf.get_params() )
-        print("Accuracy: %0.3f (+/- %0.3f)" % (scores.mean(), scores.std() * 2))
+        self.clf = svm.SVC( C=self.clf_gs.best_estimator_.C)
+        scores = cross_validation.cross_val_score(self.clf, self.selected_X, self.y, cv=10)
+        print("[status]\tAccuracy: %0.3f (+/- %0.3f)" % (scores.mean(), scores.std() * 2))
 
     def roc_curve(self):
         ''' define a class for plotting multi-class roc curve
@@ -131,8 +153,9 @@ class TrainModel:
 ## ----------------------------------------
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("-i", help="input a-site file")
-    #parser.add_argument("-q", help="minimum mapq allowed", default=10, type=int)
+    parser.add_argument("-i", help="input a-site file, required")
+    parser.add_argument("-c", help="classifier to use, random forest (rf) or "
+                                   "\support vector machine (svm), optional, default: rf", default="rf")
 
     ## check if there is any argument
     if len(sys.argv) <= 1:
@@ -145,6 +168,7 @@ if __name__ == '__main__':
     if (args.i != None):
         print("[status]\tprocessing the input file: " + args.i)
         asite_fn = args.i
+        classifier = args.c
 
         print("[execute]\tplotting the a-site location distribution from " + str(asite_fn))
         asite_loc = VisualizeAsite(asite_fn)
@@ -152,8 +176,12 @@ if __name__ == '__main__':
 
         print("[execute]\tperform cross validation on the training data")
         model = TrainModel(asite_loc)
-        model.fit()
-        model.roc_curve()
+        if classifier == "rf":
+            model.rf_fit()
+            model.rf_importance()
+        elif classifier == "svm":
+            model.svm_fit()
+            model.roc_curve()
 
     else:
         print("[error]\tmissing argument")
