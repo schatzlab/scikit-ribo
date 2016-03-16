@@ -40,9 +40,6 @@ class Gtf2Bed:
         self.start = self.bedtool_sort.filter(lambda x: x[2] == "CDS")
         self.out_bed = self.start.each(gff2bed).saveas(self.fn + '.sort.CDS.bed')
 
-        #self.in_gtf.strip( '.gtf' )
-        #self.out_bed = self.start.each(gff2bed).saveas(self.fn + '.sort.start.bed')
-
 ## the main process
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -61,7 +58,8 @@ if __name__ == '__main__':
         input_fl = args.i
         bt_obj = Gtf2Bed(input_fl)
         bt_obj.convert()
-        
+        print ("[status]\tFinished.")
+
     else:
         print ("[error]\tmissing argument")
         parser.print_usage() 
