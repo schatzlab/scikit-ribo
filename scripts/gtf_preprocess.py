@@ -25,20 +25,23 @@ class Gtf2Bed:
         self.bedtool = None
         self.start = None
         self.out_bed = None
+        self.bedtool = pbt.BedTool(self.in_gtf)
+        self.fn = os.path.splitext(self.in_gtf)[0]
 
     def convert(self):
-        ''' create a bedtool object '''
-        self.bedtool = pbt.BedTool(self.in_gtf)
-        
-        ''' extract start codon entries '''
-        self.start = self.bedtool.filter(lambda x: x[2] == "start_codon")
-        
-        ''' sort by coordinates '''
-        self.start_sort = self.start.sort()
+        ## sort by coordinates
+        self.bedtool_sort = self.bedtool.sort()
 
-        ''' save the sorted start codon records to a bed file'''
-        # self.fn = self.in_gtf.strip( '.gtf' )
-        # self.out_bed = self.start_sort.each(gff2bed).saveas(self.fn + '.sort.start.bed') # , trackline='track name=test')
+        ## extract start codon entries, save the records to a bed file
+        self.start = self.bedtool_sort.filter(lambda x: x[2] == "start_codon")
+        self.out_bed = self.start.each(gff2bed).saveas(self.fn + '.sort.start.bed')
+
+        ## extract CDS entries, save the records to a bed file
+        self.start = self.bedtool_sort.filter(lambda x: x[2] == "CDS")
+        self.out_bed = self.start.each(gff2bed).saveas(self.fn + '.sort.CDS.bed')
+
+        #self.in_gtf.strip( '.gtf' )
+        #self.out_bed = self.start.each(gff2bed).saveas(self.fn + '.sort.start.bed')
 
 ## the main process
 if __name__ == '__main__':
