@@ -60,7 +60,6 @@ class TrainModel:
         self.asite_fn = object.asite_fn
         self.df_colnames = list(self.traning_df.columns.values)
         self.df_colnames.remove("a_site")
-        self.df_colnames.remove("gene_name")
         self.X = np.array( pd.get_dummies(self.traning_df[self.df_colnames]) ) # .astype(np.int8)
         self.y = np.array( self.traning_df["a_site"])
         self.testing_fn = testing_fn
@@ -106,14 +105,13 @@ class TrainModel:
         testing_df_colnames = list(testing_df.columns.values)
         names_to_exclude = set(["chrom", "start", "end", "name", "score", "strand", "read"])
         testing_df_colnames_subset = [x for x in testing_df_colnames if x not in names_to_exclude]
-        testing_df_colnames_subset.remove("gene_name")
         testing_X = np.array( pd.get_dummies(testing_df[testing_df_colnames_subset]) ) # .astype(np.int8)
 
         ## selected a subset of features and predict a-site
         selected_testing_X = self.transformer.transform(testing_X)
         testing_df["a_site"] = self.new_clf.predict(selected_testing_X)
         testing_df_out = testing_df[["chrom", "start", "end", "name", "score", "strand", "read", "a_site", \
-                                     "read_length", "offset", "start_seq", "end_seq", "gene_name"]]
+                                     "read_length", "offset", "start_seq", "end_seq", "gene_strand"]]
         testing_df_out.to_csv(path_or_buf=self.testing_fn + '.predicted.txt', sep='\t', header=True, index=False)
 
     def svm_fit(self):

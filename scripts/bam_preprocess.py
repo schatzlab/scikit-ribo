@@ -105,7 +105,7 @@ class ConvertBam():
         bam_cds_df_read['offset'] = bam_cds_df_read['distance'] % 3
 
         ## slice the dataframe to the variables needed for training data
-        bam_cds_df_read_out = bam_cds_df_read[["read_length", "offset", "start_seq", "end_seq", "gene_name", "read"]]
+        bam_cds_df_read_out = bam_cds_df_read[[ "read_length", "offset", "start_seq", "end_seq", "gene_strand", "chrom", "start", "end", "name", "score", "strand", "read"]]
         bam_cds_df_read_out.to_csv(path_or_buf=self.bam + '.cds.txt', sep='\t', header=True, index=False)
 
 
@@ -146,7 +146,7 @@ if __name__ == '__main__':
 
         print("[execute]\tstart converting the filtered bam file", flush=True)
         converted_bam = ConvertBam(fetch_aln, start_bed_fl, cds_bed_fl, out_bam_fn)
-        print("[execute]\tconstruct pandas dataframe of traning data", flush=True)
+        print("[execute]\tconstruct pandas dataframe of training data", flush=True)
         converted_bam.training_data()
         print("[execute]\tconstruct pandas dataframe of testing data", flush=True)
         converted_bam.testing_data()
