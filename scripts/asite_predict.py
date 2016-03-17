@@ -73,15 +73,12 @@ class TrainModel:
         self.importances = self.clf.feature_importances_
         self.transformer = SelectFromModel(self.clf, prefit=True, threshold=0.05)
         self.selected_X = self.transformer.transform(self.X)
-
-        ## find the number of select features
         n_selected_features = self.selected_X.shape[1]
-        print (self.X.shape, self.selected_X.shape,  flush=True)
+        print("[status]\tNumber of selected features:\t"+ str(n_selected_features), flush=True)
 
         ## define a new classifier for reduced features
         self.new_clf = RandomForestClassifier(max_features=None, n_jobs=-1)
         self.new_clf = self.new_clf.fit(self.selected_X, self.y)
-        print("[status]\tNumber of selected features:\t"+ str(n_selected_features), flush=True)
 
         ## cross validation
         scores = cross_validation.cross_val_score(self.new_clf, self.selected_X, self.y, cv=10)
