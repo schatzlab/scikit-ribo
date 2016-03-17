@@ -70,13 +70,13 @@ class ConvertBam():
         bam_start_df = bam_start.to_dataframe(names=['chrom', 'start', 'end', 'name', 'score', 'strand', 'thickStart',
                                                      'thickEnd', 'itemRgb', 'blockCount', 'blockSizes', 'blockStarts',
                                                      'sc_chrom', 'sc_start', 'sc_end', 'gene_name', 'sc_score',
-                                                     'sc_strand'])
+                                                     'gene_strand'])
 
         ## retrieve the read length and seq information from the bam file
         bam_start_df_read = pd.merge(bam_start_df, self.read_df, on='name')
-        bam_start_df_read['a_site'] = np.where(bam_start_df_read['sc_strand'] == '+',
+        bam_start_df_read['a_site'] = np.where(bam_start_df_read['gene_strand'] == '+',
                                                bam_start_df_read['sc_start'] - bam_start_df_read['start'] + 3,
-                                               bam_start_df_read['end'] - bam_start_df_read['sc_end'] + 3)
+                                               bam_start_df_read['end'] - bam_start_df_read['sc_end'] + 3 )
         bam_start_df_read['offset'] = bam_start_df_read['a_site'] % 3
 
         ## filter a read by whether it has a-site that satisfies [12,18]
@@ -85,7 +85,7 @@ class ConvertBam():
 
         ## slice the dataframe to the variables needed for training data
         bam_start_df_read_filter_out = bam_start_df_read_filter[
-            ["a_site", "read_length", "offset", "start_seq", "end_seq", "gene_name"]]
+            ["a_site", "read_length", "offset", "start_seq", "end_seq", "gene_strand"]]
         bam_start_df_read_filter_out.to_csv(path_or_buf=self.bam + '.asite.txt', sep='\t', header=True, index=False)
 
     def testing_data(self):
