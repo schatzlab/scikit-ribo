@@ -215,6 +215,9 @@ if __name__ == '__main__':
             model.svm_fit()
             model.roc_curve()
 
+        ## end
+        print("[status]\tAnalysis finished.", flush=True)
+
     else:
         print("[error]\tmissing argument", flush=True)
         parser.print_usage()
