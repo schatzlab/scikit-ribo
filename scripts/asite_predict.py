@@ -29,6 +29,8 @@ from sklearn.multiclass import OneVsRestClassifier
 from sklearn.grid_search import GridSearchCV
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_selection import SelectFromModel
+import pybedtools as pbt
+
 
 class VisualizeAsite:
     ''' define a class for plotting a-site location distribution
@@ -103,16 +105,16 @@ class TrainModel:
         ## create df for testing data
         testing_df = pd.read_table(self.testing_fn,  header=0)
         testing_df_colnames = list(testing_df.columns.values)
-        names_to_exclude = set(["chrom", "start", "end", "name", "score", "strand", "read"])
+        names_to_exclude = set(["gene_chrom", "gene_start", "gene_end", "gene_name", "chrom", "start", "end", "name", "score", "strand", "read"])
         testing_df_colnames_subset = [x for x in testing_df_colnames if x not in names_to_exclude]
         testing_X = np.array( pd.get_dummies(testing_df[testing_df_colnames_subset]) ) # .astype(np.int8)
 
         ## selected a subset of features and predict a-site
         selected_testing_X = self.transformer.transform(testing_X)
         testing_df["a_site"] = self.new_clf.predict(selected_testing_X)
-        testing_df_out = testing_df[["chrom", "start", "end", "name", "score", "strand", "read", "a_site", \
-                                     "read_length", "offset", "start_seq", "end_seq", "gene_strand"]]
-        testing_df_out.to_csv(path_or_buf=self.testing_fn + '.predicted.txt', sep='\t', header=True, index=False)
+        self.testing_df_out = testing_df[["chrom", "start", "end", "name", "strand", "read", "a_site",
+                                     "read_length", "offset", "gene_chrom", "gene_start", "gene_end", "gene_name", "gene_strand"]]
+        self.testing_df_out.to_csv(path_or_buf=self.testing_fn + '.predicted.txt', sep='\t', header=True, index=False)
 
     def svm_fit(self):
         ## grid search
@@ -170,6 +172,42 @@ class TrainModel:
         plt.gcf()
         plt.savefig( self.asite_fn + ".roc.pdf")
 
+    def recover_asite(self):
+        ## calculate the ribosome position, +/- strand is different
+        self.testing_df_out = pd.read_table(self.testing_fn+'.predicted.txt',  header=0)
+        self.testing_df_out['ribosome_position'] = np.where(self.testing_df_out['gene_strand'] == '+',
+                                                       (self.testing_df_out['start'] - self.testing_df_out['gene_start'] + self.testing_df_out['a_site'])/3,
+                                                       (self.testing_df_out['gene_end'] - self.testing_df_out['end'] + self.testing_df_out['a_site'])/3 ).astype(int)
+
+        ## calculate the transcript length in codon space
+        self.testing_df_out["length_in_codons"] = ( self.testing_df_out["gene_start"] - self.testing_df_out["gene_end"] ) / 3
+        self.testing_df_out["length_in_codons"] = self.testing_df_out["length_in_codons"].abs().astype(int)
+
+        ## create an empty df for the entire set of transcripts
+        gene_size_df =  self.testing_df_out[["gene_name","length_in_codons"]].drop_duplicates()
+        gene_list = list()
+        for i in gene_size_df.gene_name:
+            gene_length=gene_size_df.loc[ gene_size_df["gene_name"]==i ]["length_in_codons"].values[0]
+            for j in range(0, gene_length):
+                               gene_list.append([i,j])
+
+        ribo_null_df = pd.DataFrame(gene_list, columns=["gene_name", "ribosome_position"])
+
+        groupby_df = self.testing_df_out.groupby(["gene_name","ribosome_position" ])
+        groupby_df_count = groupby_df.size().reset_index(name="ribosome_count")
+
+        ## left outer join the null df and the groupby_df_count to get ribsome counts at each position
+        ribo_count_df = pd.merge( ribo_null_df, groupby_df_count, how = "left", on = ["gene_name","ribosome_position"] ).fillna(value=0)
+        ribo_count_df["ribosome_count"] = ribo_count_df["ribosome_count"].astype(int)
+        ribo_count_df.to_csv(path_or_buf=self.testing_fn + '.ribocount.txt', sep='\t', header=True, index=False)
+        
+        #slice_codon = lambda x : x['read'][x['a_site']:x['a_site_end']]
+        #testing_df_out['a_site_codon'] = testing_df_out.apply(slice_codon, axis = 1)
+        #testing_df_out['a_site_codon_correct']  = np.where(testing_df_out['strand'] == '+',
+        #                                               testing_df_out['a_site_codon'] ,
+        #                                               reverse_complement (testing_df_out['a_site_codon']))
+        # testing_df_out['codon'] = testing_df_out['read'].str[15:18]
+
 ## ----------------------------------------
 ## the main work
 ## ----------------------------------------
@@ -196,18 +234,20 @@ if __name__ == '__main__':
 
         print("[execute]\tplotting the a-site location distribution from " + str(asite_fn), flush=True)
         asite_loc = VisualizeAsite(asite_fn)
-        asite_loc.plot()
+        # asite_loc.plot()
 
         print("[execute]\tstart the process of a_site prediction", flush=True)
         model = TrainModel(asite_loc, cds_fn)
 
         if classifier == "rf":
             print("[execute]\tperform model training and cross validation on the training data", flush=True)
-            model.rf_fit()
+            # model.rf_fit()
             print("[execute]\tplotting the bar plot of the feature importance", flush=True)
-            model.rf_importance()
+            # model.rf_importance()
             print("[execute]\tpredicting the a-site from the testing data", flush=True)
-            model.rf_predict()
+            # model.rf_predict()
+            print("[execute]\tlocalize the a-site codon and create coverage vectors", flush=True)
+            model.recover_asite()
 
         elif classifier == "svm":
             model.svm_fit()
