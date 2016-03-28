@@ -81,9 +81,9 @@ class Gtf2Bed:
         CDS_bedtool_df = CDS_bedtool.to_dataframe(names=['gene_chrom', 'gene_start', 'gene_end', 'gene_name', 'gene_score',
                                                          'gene_strand', 'gene_thickStart', 'gene_thickEnd', 'gene_reserved',
                                                          'gene_blockCount','gene_blockSizes', 'gene_blockStarts'])
-        # print(CDS_bedtool_df)
 
-        cds_list = list()
+        ##  construct the df from the bed12 file
+        cds_codonidxs = list()
         for gene_name in CDS_bedtool_df.gene_name:
             gene_start = CDS_bedtool_df.loc[ CDS_bedtool_df["gene_name"]==gene_name ]["gene_start"].values[0]
             gene_end = CDS_bedtool_df.loc[ CDS_bedtool_df["gene_name"]==gene_name ]["gene_end"].values[0]
@@ -107,7 +107,7 @@ class Gtf2Bed:
                 for start in cds_intervals:
                     if cds_idx % 3 == 0:
                         codon_idx = cds_idx // 3
-                        print (chrom, start, start+3, gene_name, cds_idx, codon_idx)
+                        cds_codonidxs.append( [chrom, start, start+3, gene_name, codon_idx, gene_strand])
                     cds_idx += 1
 
             elif gene_strand == "-":
@@ -115,39 +115,14 @@ class Gtf2Bed:
                 for start in cds_intervals:
                     if cds_idx % 3 == 0:
                         codon_idx = cds_idx // 3 - 1
-                        print (chrom, start, start+3, gene_name, cds_idx, codon_idx)
+                        cds_codonidxs.append( [chrom, start, start+3, gene_name, codon_idx, gene_strand])
                     cds_idx -= 1
 
-        '''
+        ## export the df to a bed3 file plus two fields
+        with open( self.prefix + '.cds_codonidxs.bed', 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile, delimiter='\t')
+            writer.writerows(cds_codonidxs)
 
-        ## calculate the ribosome position, +/- strand is different
-        self.bedtool_sort_df = self.bedtool_sort.to_dataframe(names=['gene_chrom', 'gene_start', 'gene_end', 'gene_name', 'gene_score',
-                                                 'gene_strand'])
-
-        ## calculate the transcript length in codon space
-        self.bedtool_sort_df["length_in_codons"] = (self.bedtool_sort_df["gene_start"] - self.bedtool_sort_df["gene_end"]) / 3
-        self.bedtool_sort_df["length_in_codons"] = self.bedtool_sort_df["length_in_codons"].abs().astype(int)
-
-        ## create an empty df for the entire set of transcripts
-        gene_size_df =  self.bedtool_sort_df[["gene_name","length_in_codons"]].drop_duplicates()
-        gene_list = list()
-        for i in gene_size_df.gene_name:
-            gene_length=gene_size_df.loc[ gene_size_df["gene_name"]==i ]["length_in_codons"].values[0]
-            for j in range(0, gene_length):
-                               gene_list.append([i,j])
-
-        '''
-
-        '''
-
-        ## create an empty df for the entire set of transcripts
-        gene_size_df =  self.testing_df_out[["gene_name","length_in_codons"]].drop_duplicates()
-        gene_list = list()
-        for i in gene_size_df.gene_name:
-            gene_length=gene_size_df.loc[ gene_size_df["gene_name"]==i ]["length_in_codons"].values[0]
-            for j in range(0, gene_length):
-                               gene_list.append([i,j])
-        '''
 
 ## the main process
 if __name__ == '__main__':
