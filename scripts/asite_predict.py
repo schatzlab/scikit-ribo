@@ -241,18 +241,18 @@ if __name__ == '__main__':
 
         print("[execute]\tplotting the a-site location distribution from " + str(asite_fn), flush=True)
         asite_loc = VisualizeAsite(asite_fn)
-        # asite_loc.plot()
+        asite_loc.plot()
 
         print("[execute]\tstart the process of a_site prediction", flush=True)
         model = TrainModel(asite_loc, cds_fn, cds_idx)
 
         if classifier == "rf":
             print("[execute]\tperform model training and cross validation on the training data", flush=True)
-            # model.rf_fit()
+            model.rf_fit()
             print("[execute]\tplotting the bar plot of the feature importance", flush=True)
-            # model.rf_importance()
+            model.rf_importance()
             print("[execute]\tpredicting the a-site from the testing data", flush=True)
-            # model.rf_predict()
+            model.rf_predict()
             print("[execute]\tlocalize the a-site codon and create coverage vectors", flush=True)
             model.recover_asite()
 
