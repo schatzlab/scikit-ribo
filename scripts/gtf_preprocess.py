@@ -17,6 +17,7 @@ import sys
 import csv
 import argparse
 import pybedtools as pbt
+import pandas as pd
 from pybedtools.featurefuncs import gff2bed
 import numpy as np
 import gffutils
@@ -25,9 +26,11 @@ import gffutils
 class Gtf2Bed:
     ''' class to sort and get start codon from a gtf file
     '''
-    def __init__(self, gtf, fasta):
+    def __init__(self, gtf, fasta, pairprob, tpm):
         self.gtf = gtf
         self.fasta = fasta
+        self.pairprob = pairprob
+        self.tpm = tpm
         self.start = None
         self.bedtool = pbt.BedTool(self.gtf)
         self.prefix = os.path.splitext(self.gtf)[0]
@@ -73,10 +76,23 @@ class Gtf2Bed:
                 writer = csv.writer(csvfile, delimiter='\t')
                 writer.writerows(gene_bed6s)
 
-    def get_fasta(self):
+    def transform_pairprob(self):
+        ## read the pairing prob arrays then convert it to a df
+        pairprob = list()
+        with open(self.pairprob, 'r') as csv_file:
+            csv_reader = csv.reader(csv_file, delimiter='\t')
+            for row in csv_reader:
+                codon_idx = 0
+                gene_name = row[0]
+                for prob in row[1].split(" "):
+                    pairprob.append([gene_name, codon_idx, float(prob)]) # (prob)
+                    codon_idx += 1# dict_meta[row[0]] = row[1:]
+        self.pairprob_df = pd.DataFrame(pairprob, columns= ["gene_name","codon_idx","pair_prob"])
+
+    def get_codon_idx(self):
         ## extract cds sequence from the reference genome
         CDS_bedtool = pbt.BedTool(self.prefix + '.sort.CDS.bed')
-        CDS_bedtool.sequence(fi=self.fasta, fo= self.prefix + '.fasta', s=True, name=True, tab=True, split=True)
+        CDS_bedtool.sequence(fi=self.fasta, fo= self.prefix + '.fasta', s=True, name=True,  split=True) # tab=True,
 
         CDS_bedtool_df = CDS_bedtool.to_dataframe(names=['gene_chrom', 'gene_start', 'gene_end', 'gene_name', 'gene_score',
                                                          'gene_strand', 'gene_thickStart', 'gene_thickEnd', 'gene_reserved',
@@ -86,7 +102,6 @@ class Gtf2Bed:
         cds_codonidxs = list()
         for gene_name in CDS_bedtool_df.gene_name:
             gene_start = CDS_bedtool_df.loc[ CDS_bedtool_df["gene_name"]==gene_name ]["gene_start"].values[0]
-            gene_end = CDS_bedtool_df.loc[ CDS_bedtool_df["gene_name"]==gene_name ]["gene_end"].values[0]
 
             chrom = CDS_bedtool_df.loc[ CDS_bedtool_df["gene_name"]==gene_name ]["gene_chrom"].values[0]
             gene_strand = CDS_bedtool_df.loc[ CDS_bedtool_df["gene_name"]==gene_name ]["gene_strand"].values[0]
@@ -96,6 +111,7 @@ class Gtf2Bed:
             exon_sizes = CDS_bedtool_df.loc[ CDS_bedtool_df["gene_name"]==gene_name ]["gene_blockSizes"].values[0].split(",")
             exon_sizes = list(map(int, exon_sizes))
 
+            ## extract the cds nt index and save to a nested list
             cds_intervals = list()
             exon_idx = 0
             for exon_start in exon_starts:
@@ -109,7 +125,6 @@ class Gtf2Bed:
                         codon_idx = cds_idx // 3
                         cds_codonidxs.append( [chrom, start, start+3, gene_name, codon_idx, gene_strand])
                     cds_idx += 1
-
             elif gene_strand == "-":
                 cds_idx = len(cds_intervals)
                 for start in cds_intervals:
@@ -118,17 +133,34 @@ class Gtf2Bed:
                         cds_codonidxs.append( [chrom, start, start+3, gene_name, codon_idx, gene_strand])
                     cds_idx -= 1
 
+        ## convert nested list to df
+        self.cds_codonidxs_df = pd.DataFrame(cds_codonidxs, columns=["chrom", "asite_start", "asite_end", "gene_name",
+                                                                     "codon_idx", "gene_strand"])
+
+    def merge_df(self):
+        ## import the salmon df and merge with cds df
+        tpm_df = pd.read_table(self.tpm,  header=0)
+        cds_codonidxs_tpm_df = pd.merge(self.cds_codonidxs_df, tpm_df, how = "left", left_on = ["gene_name"], right_on="Name")
+        cds_codonidxs_tpm_pairprob_df = pd.merge(cds_codonidxs_tpm_df, self.pairprob_df, how = "inner", on = ["gene_name", "codon_idx"])
+        cds_codonidxs_tpm_pairprob_df_out = cds_codonidxs_tpm_pairprob_df[["chrom", "asite_start", "asite_end",
+                                                                           "gene_name", "codon_idx", "gene_strand",
+                                                                           "TPM", "pair_prob"]]
+        cds_codonidxs_tpm_pairprob_df_out.to_csv(path_or_buf=self.prefix + '.cds_codonidxs.bed', sep='\t',
+                                                 header=True, index=False)
+
         ## export the df to a bed3 file plus two fields
-        with open( self.prefix + '.cds_codonidxs.bed', 'w', newline='') as csvfile:
-            writer = csv.writer(csvfile, delimiter='\t')
-            writer.writerows(cds_codonidxs)
+        #with open( self.prefix + '.cds_codonidxs.bed', 'w', newline='') as csvfile:
+        #    writer = csv.writer(csvfile, delimiter='\t')
+        #    writer.writerows(cds_codonidxs)
 
 
 ## the main process
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("-g", help="input gtf file")
-    parser.add_argument("-r", help="input fasta file")
+    parser.add_argument("-g", help="input gtf file, required")
+    parser.add_argument("-r", help="input fasta file, required")
+    parser.add_argument("-s", help="input arrays of RNA secondary structure pairing probabilities, required")
+    parser.add_argument("-t", help="input pre-computed tpm salmon data-frame from RNA-seq data, required")
 
     ## check if there is any argument
     if len(sys.argv) <= 1: 
@@ -142,10 +174,16 @@ if __name__ == '__main__':
         print ("[status]\tprocessing the input file: " + args.g, flush=True)
         input_gtf = args.g
         input_ref = args.r
-        gtf_hdl = Gtf2Bed(input_gtf, input_ref)
+        input_sec_pairprob = args.s
+        input_tpm = args.t
+
+        ## execute
+        gtf_hdl = Gtf2Bed(input_gtf, input_ref, input_sec_pairprob, input_tpm)
         gtf_hdl.convert_gtf()
         gtf_hdl.get_startcodon()
-        gtf_hdl.get_fasta()
+        gtf_hdl.transform_pairprob()
+        gtf_hdl.get_codon_idx()
+        gtf_hdl.merge_df()
 
         print ("[status]\tFinished.", flush=True)
 
