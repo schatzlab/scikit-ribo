@@ -20,6 +20,7 @@ import sys
 import pandas as pd
 import seaborn as sns
 import numpy as np
+import pybedtools as pbt
 import argparse
 from sklearn import linear_model, cross_validation, preprocessing, svm, tree
 from sklearn.metrics import roc_curve, auc
@@ -29,7 +30,6 @@ from sklearn.multiclass import OneVsRestClassifier
 from sklearn.grid_search import GridSearchCV
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_selection import SelectFromModel
-import pybedtools as pbt
 
 
 class VisualizeAsite:
