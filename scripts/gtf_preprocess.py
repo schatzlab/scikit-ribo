@@ -148,11 +148,6 @@ class Gtf2Bed:
         cds_codonidxs_tpm_pairprob_df_out.to_csv(path_or_buf=self.prefix + '.cds_codonidxs.bed', sep='\t',
                                                  header=True, index=False)
 
-        ## export the df to a bed3 file plus two fields
-        #with open( self.prefix + '.cds_codonidxs.bed', 'w', newline='') as csvfile:
-        #    writer = csv.writer(csvfile, delimiter='\t')
-        #    writer.writerows(cds_codonidxs)
-
 
 ## the main process
 if __name__ == '__main__':
@@ -170,7 +165,7 @@ if __name__ == '__main__':
         args = parser.parse_args()
     
     ## process the file if the input files exist
-    if (args.g!=None) & (args.r!=None):  # & (args.sort!=None) & (args.start!=None):
+    if (args.g!=None) & (args.r!=None) & (args.s!=None) & (args.t!=None):  # & (args.sort!=None) & (args.start!=None):
         print ("[status]\tprocessing the input file: " + args.g, flush=True)
         input_gtf = args.g
         input_ref = args.r
