@@ -48,7 +48,7 @@ class VisualizeAsite:
                            col_order= list(range(25,36)),
                            row_order= list(range(3)))
         bins = np.linspace(12, 21, 10)
-        g0.map(plt.hist, "a_site", color="steelblue", bins=bins, lw=0,normed=True)
+        g0.map(plt.hist, "asite", color="steelblue", bins=bins, lw=0,normed=True)
         g0.set(xticks=[12,15,18,21])
         plt.gcf()
         plt.savefig( self.asite_fn +".asite.pdf" )
@@ -61,15 +61,13 @@ class TrainModel:
         self.traning_df = object.asite_df
         self.asite_fn = object.asite_fn
         self.df_colnames = list(self.traning_df.columns.values)
-        self.df_colnames.remove("a_site")
+        self.df_colnames.remove("asite")
         self.X = np.array( pd.get_dummies(self.traning_df[self.df_colnames]) ) # .astype(np.int8)
-        self.y = np.array( self.traning_df["a_site"])
+        self.y = np.array( self.traning_df["asite"])
         self.testing_fn = testing_fn
-        self.testing_df = pd.read_table(self.testing_fn,  header=0)
+        self.testing_df = pd.read_table(self.testing_fn, header=0)
         self.cds_idx_fn = cds_idx_fn
-        self.cds_idx_df = pd.read_table(self.cds_idx_fn,  names=["chrom", "asite_start", "asite_end", "gene_name", "gene_index",
-                                                                 "gene_strand"])
-
+        self.cds_idx_df = pd.read_table(self.cds_idx_fn, header=0)
 
     def rf_fit(self):
         ## feature selection
@@ -115,8 +113,8 @@ class TrainModel:
 
         ## selected a subset of features and predict a-site
         selected_testing_X = self.transformer.transform(testing_X)
-        testing_df["a_site"] = self.new_clf.predict(selected_testing_X)
-        self.testing_df_out = testing_df[["chrom", "start", "end", "name", "strand", "read", "a_site",
+        testing_df["asite"] = self.new_clf.predict(selected_testing_X)
+        self.testing_df_out = testing_df[["chrom", "start", "end", "name", "strand", "read", "asite",
                                      "read_length", "offset", "gene_chrom", "gene_start", "gene_end", "gene_name", "gene_strand"]]
         self.testing_df_out.to_csv(path_or_buf=self.testing_fn + '.predicted.txt', sep='\t', header=True, index=False)
 
@@ -176,8 +174,9 @@ class TrainModel:
         plt.gcf()
         plt.savefig( self.asite_fn + ".roc.pdf")
 
-    def adjust_aite(start, asite):
-        return start + a_site, start + a_site + 3
+    def reverse_complement(seq):
+        seq_dict = {'A':'T','T':'A','G':'C','C':'G'}
+        return "".join([seq_dict[base] for base in reversed(seq)])
 
     def recover_asite(self):
         ## import the predicted a-site location df
@@ -185,14 +184,14 @@ class TrainModel:
 
         ## adjust by the a-site location and calculate the a-site location in nt space, -1 is the missing value
         self.testing_df_out['asite_start'] = np.where( self.testing_df_out['gene_strand'] == '+',
-                                                (self.testing_df_out['start'] + self.testing_df_out['a_site']),
+                                                (self.testing_df_out['start'] + self.testing_df_out['asite']),
                                                 (-1) ).astype(int)
         self.testing_df_out['asite_end'] = np.where(self.testing_df_out['gene_strand'] == '+',
                                                 (self.testing_df_out['asite_start'] + 3),
-                                                (self.testing_df_out['end'] - self.testing_df_out['a_site']) ).astype(int)
+                                                (self.testing_df_out['end'] - self.testing_df_out['asite']) ).astype(int)
 
         self.testing_df_out['asite_start'] = np.where(self.testing_df_out['gene_strand'] == '-',
-                                                (self.testing_df_out['end'] - 3),
+                                                (self.testing_df_out['asite_end'] - 3),
                                                 (self.testing_df_out['asite_start']) ).astype(int)
 
         ## use to group by command to retrieve ribosome coverage
@@ -200,18 +199,29 @@ class TrainModel:
         groupby_df_count = groupby_df.size().reset_index(name="ribosome_count")
 
         ## left outer join the null df and the groupby_df_count to get ribsome counts at each position
-        ribo_count_df = pd.merge( self.cds_idx_df, groupby_df_count, how = "left",
+        self.ribo_count_df = pd.merge( self.cds_idx_df, groupby_df_count, how = "left",
                                   on = ["chrom", "asite_start", "asite_end"] ).fillna(value=0)
-        ribo_count_df["ribosome_count"] = ribo_count_df["ribosome_count"].astype(int)
-        ribo_count_df.to_csv(path_or_buf=self.testing_fn + '.ribocount.txt', sep='\t', header=True, index=False)
+        self.ribo_count_df["ribosome_count"] = self.ribo_count_df["ribosome_count"].astype(int)
+        self.ribo_count_df.to_csv(path_or_buf=self.testing_fn + '.ribocount.txt', sep='\t', header=True, index=False)
 
-
-        #slice_codon = lambda x : x['read'][x['a_site']:x['a_site_end']]
-        #testing_df_out['a_site_codon'] = testing_df_out.apply(slice_codon, axis = 1)
-        #testing_df_out['a_site_codon_correct']  = np.where(testing_df_out['strand'] == '+',
-        #                                               testing_df_out['a_site_codon'] ,
-        #                                               reverse_complement (testing_df_out['a_site_codon']))
+        #self.testing_df_out['asite_codon']  = np.where(self.testing_df_out['strand'] == '+',
+        #                                          (self.testing_df_out['read']), # [self.testing_df_out['asite']:self.testing_df_out['asite']+3]),
+        #                                          ('WWW'))
+        #print(self.testing_df_out)
+        #slice_codon = lambda x : x['read'][x['asite']:x['asite_end']]
+        #testing_df_out['asite_codon'] = testing_df_out.apply(slice_codon, axis = 1)
+        #testing_df_out['asite_codon_correct']  = np.where(testing_df_out['strand'] == '+',
+        #                                               testing_df_out['asite_codon'] ,
+        #                                               reverse_complement (testing_df_out['asite_codon']))
         # testing_df_out['codon'] = testing_df_out['read'].str[15:18]
+
+    def plot_ribo_on_transcript(self):
+        ## YLR110C
+        ribo_array = self.ribo_count_df[self.ribo_count_df["gene_name"] == "YLR110C"]["ribosome_count"]
+        if self.ribo_count_df[self.ribo_count_df["gene_name"] == "YLR110C"]["gene_strand"].values[0] == "-":
+            ribo_array = ribo_array[::-1]
+
+        print (ribo_array)
 
 ## ----------------------------------------
 ## the main work
@@ -243,7 +253,7 @@ if __name__ == '__main__':
         asite_loc = VisualizeAsite(asite_fn)
         asite_loc.plot()
 
-        print("[execute]\tstart the process of a_site prediction", flush=True)
+        print("[execute]\tstart the process of a-site prediction", flush=True)
         model = TrainModel(asite_loc, cds_fn, cds_idx)
 
         if classifier == "rf":
@@ -253,15 +263,17 @@ if __name__ == '__main__':
             model.rf_importance()
             print("[execute]\tpredicting the a-site from the testing data", flush=True)
             model.rf_predict()
-            print("[execute]\tlocalize the a-site codon and create coverage vectors", flush=True)
+            print("[execute]\tlocalize the a-site codon and create coverage df/vectors", flush=True)
             model.recover_asite()
+            print("[execute]\tplot the ribosome counts along a transcript", flush=True)
+            #model.plot_ribo_on_transcript()
 
         elif classifier == "svm":
             model.svm_fit()
             model.roc_curve()
 
         ## end
-        print("[status]\tAnalysis finished.", flush=True)
+        print("[status]\tA-site module finished.", flush=True)
 
     else:
         print("[error]\tmissing argument", flush=True)
