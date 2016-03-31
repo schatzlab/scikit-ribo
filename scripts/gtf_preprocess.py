@@ -166,21 +166,27 @@ if __name__ == '__main__':
     
     ## process the file if the input files exist
     if (args.g!=None) & (args.r!=None) & (args.s!=None) & (args.t!=None):  # & (args.sort!=None) & (args.start!=None):
-        print ("[status]\tprocessing the input file: " + args.g, flush=True)
+        print ("[status]\tReading the input file: " + args.g, flush=True)
         input_gtf = args.g
         input_ref = args.r
         input_sec_pairprob = args.s
         input_tpm = args.t
 
         ## execute
+        print("[execute]\tStarting the pre-processing module", flush=True)
         gtf_hdl = Gtf2Bed(input_gtf, input_ref, input_sec_pairprob, input_tpm)
+        print("[execute]\tConverting the the gtf file in to sql db", flush=True)
         gtf_hdl.convert_gtf()
+        print("[execute]\tExtracting the start codon from the gtf db", flush=True)
         gtf_hdl.get_startcodon()
+        print("[execute]\tTransforming and preparing the df for RNA secondary structure pairing probabilities data", flush=True)
         gtf_hdl.transform_pairprob()
+        print("[execute]\tBuilding the index for each position at the codon level", flush=True)
         gtf_hdl.get_codon_idx()
+        print("[execute]\tMerging all the df together", flush=True)
         gtf_hdl.merge_df()
 
-        print ("[status]\tFinished.", flush=True)
+        print ("[status]\tPre-processing module finished.", flush=True)
 
     else:
         print ("[error]\tmissing argument", flush=True)
