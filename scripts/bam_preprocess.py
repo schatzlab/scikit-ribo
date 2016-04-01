@@ -24,8 +24,6 @@ from re import match
 from gtf_preprocess import *
 
 
-# import multiprocessing
-
 class FilterAln:
     ''' define a class for extracting alignment based on MAPQ (>10) and read length meets [25,35]
     '''
@@ -45,8 +43,8 @@ class FilterAln:
                             read.query_length >= 25 and read.query_length <= 35 and \
                     match(r'\d\dM$', read.cigarstring):
                 pysam_ftd.write(read)
-                self.read_list.append(
-                    [read.query_name, read.query_length, read.query_sequence[0:2], read.query_sequence[-2:][::-1], read.query_sequence])
+                self.read_list.append([read.query_name, read.query_length, read.query_sequence[0:2],
+                                       read.query_sequence[-2:][::-1], read.query_sequence])
         return (self.read_list)
         pysam_ftd.close()
         pysam_hdl.close()
@@ -57,16 +55,17 @@ class ConvertBam():
     '''
 
     def __init__(self, object, sc_bed, cds_bed, bam):
-        self.sc_bed = sc_bed
-        self.cds_bed = cds_bed
+        self.sc_bed = pbt.BedTool(sc_bed)
+        self.cds_bed = pbt.BedTool(cds_bed)
         self.bam = bam
-        self.bt_hdl = pbt.BedTool(self.bam)
+        self.bt_hdl = pbt.BedTool(self.bam).bam_to_bed(stream=True, bed12=True).sort()
         self.read_list = object.read_list
         self.read_df = pd.DataFrame(self.read_list, columns=['name', 'read_length', 'start_seq', 'end_seq', 'read'])
 
+
     def training_data(self):
         ## create pandas dataframes
-        bam_start = self.bt_hdl.intersect(self.sc_bed, bed=True, wa=True, wb=True, sorted=True, split=True)
+        bam_start = self.bt_hdl.intersect(self.sc_bed, wa=True, wb=True, sorted=True)
         bam_start_df = bam_start.to_dataframe(names=['chrom', 'start', 'end', 'name', 'score', 'strand', 'thickStart',
                                                      'thickEnd', 'itemRgb', 'blockCount', 'blockSizes', 'blockStarts',
                                                      'sc_chrom', 'sc_start', 'sc_end', 'gene_name', 'sc_score',
@@ -74,28 +73,29 @@ class ConvertBam():
 
         ## retrieve the read length and seq information from the bam file
         bam_start_df_read = pd.merge(bam_start_df, self.read_df, on='name')
-        bam_start_df_read['a_site'] = np.where(bam_start_df_read['gene_strand'] == '+',
+        bam_start_df_read['asite'] = np.where(bam_start_df_read['gene_strand'] == '+',
                                                bam_start_df_read['sc_start'] - bam_start_df_read['start'] + 3,
                                                bam_start_df_read['end'] - bam_start_df_read['sc_end'] + 3 )
-        bam_start_df_read['offset'] = bam_start_df_read['a_site'] % 3
+        bam_start_df_read['offset'] = bam_start_df_read['asite'] % 3
 
         ## filter a read by whether it has a-site that satisfies [12,18]
-        bam_start_df_read_filter = bam_start_df_read[((bam_start_df_read['a_site'] >= 12) &
-                                                      (bam_start_df_read['a_site'] <= 18))]
+        bam_start_df_read_filter = bam_start_df_read[((bam_start_df_read['asite'] >= 12) &
+                                                      (bam_start_df_read['asite'] <= 18))]
 
         ## slice the dataframe to the variables needed for training data
         bam_start_df_read_filter_out = bam_start_df_read_filter[
-            ["a_site", "read_length", "offset", "start_seq", "end_seq", "gene_strand"]]
+            ["asite", "read_length", "offset", "start_seq", "end_seq", "gene_strand"]]
         bam_start_df_read_filter_out.to_csv(path_or_buf=self.bam + '.asite.txt', sep='\t', header=True, index=False)
 
     def testing_data(self):
-        ## create pandas dataframes
-        # print(self.bt_hdl,flush=True)
-        bam_cds = self.bt_hdl.intersect(self.cds_bed, bed=True, wa=True, wb=True, sorted=True, split=True)
+        ## create pandas dataframes from bedtools intersect, /*important*/ to use split=True here
+        bam_cds = self.bt_hdl.intersect(self.cds_bed, wa=True, wb=True, split=True) #sorted=True,
         bam_cds_df = bam_cds.to_dataframe(names=['chrom', 'start', 'end', 'name', 'score', 'strand', 'thickStart',
                                                  'thickEnd', 'itemRgb', 'blockCount', 'blockSizes', 'blockStarts',
                                                  'gene_chrom', 'gene_start', 'gene_end', 'gene_name', 'gene_score',
-                                                 'gene_strand'])
+                                                 'gene_strand', 'gene_thickStart', 'gene_thickEnd', 'gene_itemRgb',
+                                                 'gene_blockCount', 'gene_blockSizes', 'gene_blockStarts'],
+                                          dtype={'gene_blockSizes':'object','gene_blockStarts':'object'})
 
         ## retrieve the read length and seq information from the bam file
         bam_cds_df_read = pd.merge(bam_cds_df, self.read_df, on='name')
@@ -105,7 +105,9 @@ class ConvertBam():
         bam_cds_df_read['offset'] = bam_cds_df_read['distance'] % 3
 
         ## slice the dataframe to the variables needed for training data
-        bam_cds_df_read_out = bam_cds_df_read[[ "read_length", "offset", "start_seq", "end_seq", "gene_strand", "chrom", "start", "end", "name", "score", "strand", "read"]]
+        bam_cds_df_read_out = bam_cds_df_read[[ "read_length", "offset", "start_seq", "end_seq", "gene_chrom", 
+                                                "gene_start", "gene_end", "gene_name", "gene_strand", "chrom", 
+                                                "start", "end", "name", "score", "strand", "read"]]
         bam_cds_df_read_out.to_csv(path_or_buf=self.bam + '.cds.txt', sep='\t', header=True, index=False)
 
 
