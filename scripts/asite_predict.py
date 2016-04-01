@@ -215,36 +215,6 @@ class TrainModel:
         #                                               reverse_complement (testing_df_out['asite_codon']))
         # testing_df_out['codon'] = testing_df_out['read'].str[15:18]
 
-    def plot_ribo_on_transcript(self):
-        ## YLR110C
-        self.ribo_count_df = pd.read_table(self.testing_fn + '.ribocount.txt',  header=0)
-        ribo_array = np.array(self.ribo_count_df[self.ribo_count_df["gene_name"] == "YLR110C"]["ribosome_count"])
-        pair_prob_array = np.array(self.ribo_count_df[self.ribo_count_df["gene_name"] == "YLR110C"]["pair_prob"])
-        if self.ribo_count_df[self.ribo_count_df["gene_name"] == "YLR110C"]["gene_strand"].values[0] == "-":
-            ribo_array = ribo_array[::-1]
-            pair_prob_array = pair_prob_array[::-1]
-        
-        # window = np.ones(90).astype(float)/90.0
-        # sliding_window_avg = np.convolve(ribo_array,window,mode="valid")
-
-        ## plot the ribosome count along a transcript
-        plt.figure()
-        plt.subplot(2, 1, 1)
-        plt.plot( ribo_array, sns.xkcd_rgb["denim blue"], lw = 2)
-        plt.axvline(0, color="#999999",dashes=[3,2],zorder=-1)
-        plt.axvline(ribo_array.size ,color="#999999",dashes=[3,2],zorder=-1)
-        plt.ylabel("Ribosome counts")
-        plt.subplot(2, 1, 2)
-        plt.plot( pair_prob_array, sns.xkcd_rgb["medium green"])        
-        plt.ylabel("Pairing probability")
-        plt.xlabel("Position in transcript (5' to 3')")
-        plt.axvline(0, color="#999999",dashes=[3,2],zorder=-1)
-        plt.axvline(ribo_array.size ,color="#999999",dashes=[3,2],zorder=-1)
-
-        plt.gcf()
-        plt.savefig( self.asite_fn + ".YLR110C_ribosome_count.pdf")
-
-
 ## ----------------------------------------
 ## the main work
 ## ----------------------------------------
@@ -273,23 +243,20 @@ if __name__ == '__main__':
 
         print("[execute]\tplotting the a-site location distribution from " + str(asite_fn), flush=True)
         asite_loc = VisualizeAsite(asite_fn)
-        #asite_loc.plot()
+        asite_loc.plot()
 
         print("[execute]\tstart the process of a-site prediction", flush=True)
         model = TrainModel(asite_loc, cds_fn, cds_idx)
 
         if classifier == "rf":
             print("[execute]\tperform model training and cross validation on the training data", flush=True)
-            #model.rf_fit()
+            model.rf_fit()
             print("[execute]\tplotting the bar plot of the feature importance", flush=True)
-            #model.rf_importance()
+            model.rf_importance()
             print("[execute]\tpredicting the a-site from the testing data", flush=True)
-            #model.rf_predict()
+            model.rf_predict()
             print("[execute]\tlocalize the a-site codon and create coverage df/vectors", flush=True)
-            #model.recover_asite()
-            print("[execute]\tplot the ribosome counts along a transcript", flush=True)
-            model.plot_ribo_on_transcript()
-
+            model.recover_asite()
         elif classifier == "svm":
             model.svm_fit()
             model.roc_curve()
