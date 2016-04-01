@@ -3,7 +3,7 @@
 ## ----------------------------------------
 ## scikit-ribo
 ## ----------------------------------------
-## a module for preprocessing bam files
+## a module for predictting a-site
 ## ----------------------------------------
 ## author: Han Fang
 ## contact: hanfang.cshl@gmail.com
