@@ -21,6 +21,7 @@ import pandas as pd
 from pybedtools.featurefuncs import gff2bed
 import numpy as np
 import gffutils
+from itertools import groupby
 
 
 class Gtf2Bed:
@@ -89,10 +90,22 @@ class Gtf2Bed:
                     codon_idx += 1# dict_meta[row[0]] = row[1:]
         self.pairprob_df = pd.DataFrame(pairprob, columns= ["gene_name","codon_idx","pair_prob"])
 
+    def fasta_iter(self, fasta_fn):
+        fh = open(fasta_fn)
+        faiter = (x[1] for x in groupby(fh, lambda line: line[0] == ">"))
+        fasta_dict = dict()
+        for header in faiter:
+            headerStr = header.__next__()[1:].strip()
+            seq = "".join(s.strip() for s in faiter.__next__())
+            seq_list = [seq[i:i+3] for i in range(0, len(seq), 3)]
+            fasta_dict[headerStr] = seq_list
+        return fasta_dict
+
     def get_codon_idx(self):
-        ## extract cds sequence from the reference genome
+        ## extract cds sequence from the reference genome, iterate the transcript sequence and yield codons
         CDS_bedtool = pbt.BedTool(self.prefix + '.sort.CDS.bed')
-        CDS_bedtool.sequence(fi=self.fasta, fo= self.prefix + '.fasta', s=True, name=True,  split=True) # tab=True,
+        CDS_bedtool.sequence(fi=self.fasta, fo= self.prefix + '.fasta', s=True, name=True,  split=True)
+        codons_dict = self.fasta_iter(self.prefix + '.fasta')
 
         CDS_bedtool_df = CDS_bedtool.to_dataframe(names=['gene_chrom', 'gene_start', 'gene_end', 'gene_name', 'gene_score',
                                                          'gene_strand', 'gene_thickStart', 'gene_thickEnd', 'gene_reserved',
@@ -123,19 +136,21 @@ class Gtf2Bed:
                 for start in cds_intervals:
                     if cds_idx % 3 == 0:
                         codon_idx = cds_idx // 3
-                        cds_codonidxs.append( [chrom, start, start+3, gene_name, codon_idx, gene_strand])
+                        codon = codons_dict[gene_name][codon_idx]
+                        cds_codonidxs.append( [chrom, start, start+3, gene_name, codon_idx, gene_strand, codon])
                     cds_idx += 1
             elif gene_strand == "-":
                 cds_idx = len(cds_intervals)
                 for start in cds_intervals:
                     if cds_idx % 3 == 0:
                         codon_idx = cds_idx // 3 - 1
-                        cds_codonidxs.append( [chrom, start, start+3, gene_name, codon_idx, gene_strand])
+                        codon = codons_dict[gene_name][codon_idx]
+                        cds_codonidxs.append( [chrom, start, start+3, gene_name, codon_idx, gene_strand, codon])
                     cds_idx -= 1
 
         ## convert nested list to df
         self.cds_codonidxs_df = pd.DataFrame(cds_codonidxs, columns=["chrom", "asite_start", "asite_end", "gene_name",
-                                                                     "codon_idx", "gene_strand"])
+                                                                     "codon_idx", "gene_strand","codon"])
 
     def merge_df(self):
         ## import the salmon df and merge with cds df
@@ -143,7 +158,7 @@ class Gtf2Bed:
         cds_codonidxs_tpm_df = pd.merge(self.cds_codonidxs_df, tpm_df, how = "left", left_on = ["gene_name"], right_on="Name")
         cds_codonidxs_tpm_pairprob_df = pd.merge(cds_codonidxs_tpm_df, self.pairprob_df, how = "inner", on = ["gene_name", "codon_idx"])
         cds_codonidxs_tpm_pairprob_df_out = cds_codonidxs_tpm_pairprob_df[["chrom", "asite_start", "asite_end",
-                                                                           "gene_name", "codon_idx", "gene_strand",
+                                                                           "gene_name", "codon_idx", "gene_strand", "codon",
                                                                            "TPM", "pair_prob"]]
         cds_codonidxs_tpm_pairprob_df_out.to_csv(path_or_buf=self.prefix + '.cds_codonidxs.bed', sep='\t',
                                                  header=True, index=False)
