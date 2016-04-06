@@ -60,7 +60,7 @@ class ConvertBam():
         self.bam = bam
         self.bt_hdl = pbt.BedTool(self.bam).bam_to_bed(stream=True, bed12=True).sort()
         self.read_list = object.read_list
-        self.read_df = pd.DataFrame(self.read_list, columns=['name', 'read_length', 'start_seq', 'end_seq', 'read'])
+        self.read_df = pd.DataFrame(self.read_list, columns=['name', 'read_length', 'start_seq', 'end_seq']) ## remove read
 
 
     def training_data(self):
@@ -107,7 +107,7 @@ class ConvertBam():
         ## slice the dataframe to the variables needed for training data
         bam_cds_df_read_out = bam_cds_df_read[[ "read_length", "offset", "start_seq", "end_seq", "gene_chrom", 
                                                 "gene_start", "gene_end", "gene_name", "gene_strand", "chrom", 
-                                                "start", "end", "name", "score", "strand", "read"]]
+                                                "start", "end", "name", "score", "strand"]] ## remove read
         bam_cds_df_read_out.to_csv(path_or_buf=self.bam + '.cds.txt', sep='\t', header=True, index=False)
 
 

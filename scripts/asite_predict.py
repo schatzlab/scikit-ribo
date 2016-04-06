@@ -107,15 +107,16 @@ class TrainModel:
         ## create df for testing data
         testing_df = pd.read_table(self.testing_fn,  header=0)
         testing_df_colnames = list(testing_df.columns.values)
-        names_to_exclude = set(["gene_chrom", "gene_start", "gene_end", "gene_name", "chrom", "start", "end", "name", "score", "strand", "read"])
+        names_to_exclude = set(["gene_chrom", "gene_start", "gene_end", "gene_name", "chrom", "start", "end", "name",
+                                "score", "strand"]) ## remove read
         testing_df_colnames_subset = [x for x in testing_df_colnames if x not in names_to_exclude]
-        testing_X = np.array( pd.get_dummies(testing_df[testing_df_colnames_subset]) ) # .astype(np.int8)
+        testing_X = np.array( pd.get_dummies(testing_df[testing_df_colnames_subset]) )
 
         ## selected a subset of features and predict a-site
         selected_testing_X = self.transformer.transform(testing_X)
         testing_df["asite"] = self.new_clf.predict(selected_testing_X)
-        self.testing_df_out = testing_df[["chrom", "start", "end", "name", "strand", "read", "asite",
-                                     "read_length", "offset", "gene_chrom", "gene_start", "gene_end", "gene_name", "gene_strand"]]
+        self.testing_df_out = testing_df[["chrom", "start", "end", "name", "strand", "asite", "read_length", "offset",
+                                          "gene_chrom", "gene_start", "gene_end", "gene_name", "gene_strand"]] ## remove read
         self.testing_df_out.to_csv(path_or_buf=self.testing_fn + '.predicted.txt', sep='\t', header=True, index=False)
 
     def svm_fit(self):
@@ -174,10 +175,6 @@ class TrainModel:
         plt.gcf()
         plt.savefig( self.asite_fn + ".roc.pdf")
 
-    def reverse_complement(seq):
-        seq_dict = {'A':'T','T':'A','G':'C','C':'G'}
-        return "".join([seq_dict[base] for base in reversed(seq)])
-
     def recover_asite(self):
         ## import the predicted a-site location df
         self.testing_df_out = pd.read_table(self.testing_fn+'.predicted.txt',  header=0)
@@ -204,16 +201,6 @@ class TrainModel:
         self.ribo_count_df["ribosome_count"] = self.ribo_count_df["ribosome_count"].astype(int)
         self.ribo_count_df.to_csv(path_or_buf=self.testing_fn + '.ribocount.txt', sep='\t', header=True, index=False)
 
-        #self.testing_df_out['asite_codon']  = np.where(self.testing_df_out['strand'] == '+',
-        #                                          (self.testing_df_out['read']), # [self.testing_df_out['asite']:self.testing_df_out['asite']+3]),
-        #                                          ('WWW'))
-        #print(self.testing_df_out)
-        #slice_codon = lambda x : x['read'][x['asite']:x['asite_end']]
-        #testing_df_out['asite_codon'] = testing_df_out.apply(slice_codon, axis = 1)
-        #testing_df_out['asite_codon_correct']  = np.where(testing_df_out['strand'] == '+',
-        #                                               testing_df_out['asite_codon'] ,
-        #                                               reverse_complement (testing_df_out['asite_codon']))
-        # testing_df_out['codon'] = testing_df_out['read'].str[15:18]
 
 ## ----------------------------------------
 ## the main work
@@ -243,20 +230,21 @@ if __name__ == '__main__':
 
         print("[execute]\tplotting the a-site location distribution from " + str(asite_fn), flush=True)
         asite_loc = VisualizeAsite(asite_fn)
-        asite_loc.plot()
+        #asite_loc.plot()
 
         print("[execute]\tstart the process of a-site prediction", flush=True)
         model = TrainModel(asite_loc, cds_fn, cds_idx)
 
         if classifier == "rf":
             print("[execute]\tperform model training and cross validation on the training data", flush=True)
-            model.rf_fit()
+            #model.rf_fit()
             print("[execute]\tplotting the bar plot of the feature importance", flush=True)
-            model.rf_importance()
+            #model.rf_importance()
             print("[execute]\tpredicting the a-site from the testing data", flush=True)
-            model.rf_predict()
+            #model.rf_predict()
             print("[execute]\tlocalize the a-site codon and create coverage df/vectors", flush=True)
             model.recover_asite()
+
         elif classifier == "svm":
             model.svm_fit()
             model.roc_curve()
