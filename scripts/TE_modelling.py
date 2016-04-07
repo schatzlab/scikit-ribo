@@ -3,18 +3,20 @@
 ## ----------------------------------------
 ## scikit-ribo
 ## ----------------------------------------
-## a module for normalizing read counts
+## a module for fitting the GLM of TE
 ## ----------------------------------------
 ## author: Han Fang
 ## contact: hanfang.cshl@gmail.com
 ## website: hanfang.github.io
-## date: 1/28/2016
+## date: 3/31/2016
 ## ----------------------------------------
 
 from __future__ import print_function
 import sys
 import argparse
 import numpy as np
+sys.path.remove('/sonas-hs/lyon/hpc/home/hfang/.local/lib/python3.4/site-packages/statsmodels-0.6.1-py3.4-linux-x86_64.egg') # to be removed
+import statsmodels
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
 import pandas as pd
@@ -32,14 +34,16 @@ class GLM_TE:
         self.df['TPM'] = np.log(self.df['TPM'])
 
         ## construct feature array and outcome array
-        y, X = dmatrices('ribosome_count ~ gene_name + codon + TPM + pair_prob', data=self.df, return_type='dataframe')
-        print(y)
-        print(X)
+        formula = 'ribosome_count ~ gene_name + codon + TPM + pair_prob' 
+        # y, X = dmatrices('ribosome_count ~ gene_name + codon + TPM + pair_prob', data=self.df, return_type='dataframe')
 
         ## model fitting
-        #mod = smf.glm(y, X, family=sm.families.NegativeBinomial())
-        #mod.fit(skip_hessian=True)
-        #print ( mod.summary() )
+        mod = smf.glm(formula, self.df, family=sm.families.NegativeBinomial())
+        #for sovler in ["newton", "nm", "bfgs", "lbfgs", "cg", "ncg"]:
+        sovler = "bfgs"
+        print("[status]\tsolver: " + sovler, flush=True)
+        res = mod.fit(method=sovler)
+        print ( res.summary() )
 
 
 ## the main process
@@ -59,15 +63,14 @@ if __name__ == '__main__':
     if (args.i!=None) & (args.o!=None):
 
         ## Load the content of the table
+        print("[status]\tstatsmodel version:\t"+ str(statsmodels.__version__), flush=True)
+        print("[status]\tReading the file: " + str(args.i), flush=True)
         df_fn = args.i
+        print("[execute]\tStart the modelling of TE", flush=True)
         model_hdl = GLM_TE(df_fn)
+        print("[execute]\tFitting the GLM", flush=True)
         model_hdl.nb_glm()
 
-        # cnt_array=pd.io.parsers.read_table(args.i,header=None,names=('count', 'gene', 'codon', 'rna_reads', 'rpf_reads') )
-        # cnt_array = np.genfromtxt(args.i, delimiter='\t', dtype=None, names=('count', 'gene', 'codon', 'rna_reads', 'rpf_reads','len','tpm','pair_prob'))
-
-        ## Calculate the normalization factor for each sample
-        #nb_glm(cnt_array)
 
     else:
         print ("[error]\tmissing argument")
