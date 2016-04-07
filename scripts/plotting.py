@@ -39,9 +39,13 @@ class Figures:
         pair_prob_array = np.array(self.ribo_df[self.ribo_df["gene_name"] == gene_name]["pair_prob"])
         
         ## reverse the array if the strand is -
-        if self.ribo_df[self.ribo_df["gene_name"] == gene_name]["gene_strand"].values[0] == "-":
+        if self.ribo_df.loc[self.ribo_df["gene_name"] == gene_name]["gene_strand"].values[0] == "-":
             ribo_array = ribo_array[::-1]
             pair_prob_array = pair_prob_array[::-1]
+
+        ## sliding window average of the pair probability
+        window = np.ones(5).astype(float)/5.0
+        sliding_window_avg = np.convolve(pair_prob_array,window,mode="valid")
 
         ## plot the ribosome count along a transcript
         plt.figure()
@@ -52,11 +56,14 @@ class Figures:
         plt.axvline(ribo_array.size ,color="#999999",dashes=[3,2],zorder=-1)
         plt.ylabel("Ribosome counts")
         plt.subplot(2, 1, 2)
-        plt.plot( pair_prob_array, sns.xkcd_rgb["medium green"])        
+        plt.plot( pair_prob_array, sns.xkcd_rgb["medium green"], label="Per codon pairing probability")
+        plt.plot( sliding_window_avg, sns.xkcd_rgb["amber"], label="5 codon average probability")
+        plt.ylim([0,1])
         plt.ylabel("Pairing probability")
         plt.xlabel("Position in transcript (5' to 3')")
         plt.axvline(0, color="#999999",dashes=[3,2],zorder=-1)
         plt.axvline(ribo_array.size ,color="#999999",dashes=[3,2],zorder=-1)
+        plt.legend()
         plt.gcf()
         plt.savefig( gene_name + "_ribosome_count.pdf")
         plt.clf()
@@ -65,14 +72,17 @@ class Figures:
     def plot_all_genes(self):        
         ## loop over all genes and plot
         for gene_name in set(self.ribo_df["gene_name"]):
-            print (gene_name, flush=True)
             ribo_array = np.array(self.ribo_df[self.ribo_df["gene_name"] == gene_name]["ribosome_count"])
             pair_prob_array = np.array(self.ribo_df[self.ribo_df["gene_name"] == gene_name]["pair_prob"])
 
             ## reverse the array if the strand is -
-            if self.ribo_df[self.ribo_df["gene_name"] == gene_name]["gene_strand"].values[0] == "-":
+            if self.ribo_df.loc[self.ribo_df["gene_name"] == gene_name]["gene_strand"].values[0] == "-":
                 ribo_array = ribo_array[::-1]
                 pair_prob_array = pair_prob_array[::-1]
+
+            ## sliding window average of the pair probability
+            window = np.ones(5).astype(float)/5.0
+            sliding_window_avg = np.convolve(pair_prob_array,window,mode="valid")
 
             ## plot the ribosome count along a transcript
             plt.clf()
@@ -84,11 +94,14 @@ class Figures:
             plt.axvline(ribo_array.size ,color="#999999",dashes=[3,2],zorder=-1)
             plt.ylabel("Ribosome counts")
             plt.subplot(2, 1, 2)
-            plt.plot( pair_prob_array, sns.xkcd_rgb["medium green"])
+            plt.plot( pair_prob_array, sns.xkcd_rgb["medium green"], label="Per codon pairing probability")
+            plt.plot( sliding_window_avg, sns.xkcd_rgb["amber"], label="5 codon average probability")
+            plt.ylim([0,1])
             plt.ylabel("Pairing probability")
             plt.xlabel("Position in transcript (5' to 3')")
             plt.axvline(0, color="#999999",dashes=[3,2],zorder=-1)
             plt.axvline(ribo_array.size ,color="#999999",dashes=[3,2],zorder=-1)
+            plt.legend()
             plt.gcf()
             plt.savefig( "./coverage_figures/" + gene_name + "_ribosome_count.pdf")
             plt.clf()

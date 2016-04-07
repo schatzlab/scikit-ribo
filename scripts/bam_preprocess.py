@@ -44,7 +44,7 @@ class FilterAln:
                     match(r'\d\dM$', read.cigarstring):
                 pysam_ftd.write(read)
                 self.read_list.append([read.query_name, read.query_length, read.query_sequence[0:2],
-                                       read.query_sequence[-2:][::-1], read.query_sequence])
+                                       read.query_sequence[-2:][::-1] ]) ## remove read
         return (self.read_list)
         pysam_ftd.close()
         pysam_hdl.close()

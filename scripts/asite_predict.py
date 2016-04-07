@@ -117,7 +117,7 @@ class TrainModel:
         testing_df["asite"] = self.new_clf.predict(selected_testing_X)
         self.testing_df_out = testing_df[["chrom", "start", "end", "name", "strand", "asite", "read_length", "offset",
                                           "gene_chrom", "gene_start", "gene_end", "gene_name", "gene_strand"]] ## remove read
-        self.testing_df_out.to_csv(path_or_buf=self.testing_fn + '.predicted.txt', sep='\t', header=True, index=False)
+        #self.testing_df_out.to_csv(path_or_buf=self.testing_fn + '.predicted.txt', sep='\t', header=True, index=False)
 
     def svm_fit(self):
         ## grid search
@@ -177,7 +177,7 @@ class TrainModel:
 
     def recover_asite(self):
         ## import the predicted a-site location df
-        self.testing_df_out = pd.read_table(self.testing_fn+'.predicted.txt',  header=0)
+        #self.testing_df_out = pd.read_table(self.testing_fn+'.predicted.txt',  header=0)
 
         ## adjust by the a-site location and calculate the a-site location in nt space, -1 is the missing value
         self.testing_df_out['asite_start'] = np.where( self.testing_df_out['gene_strand'] == '+',
@@ -230,18 +230,18 @@ if __name__ == '__main__':
 
         print("[execute]\tplotting the a-site location distribution from " + str(asite_fn), flush=True)
         asite_loc = VisualizeAsite(asite_fn)
-        #asite_loc.plot()
+        asite_loc.plot()
 
         print("[execute]\tstart the process of a-site prediction", flush=True)
         model = TrainModel(asite_loc, cds_fn, cds_idx)
 
         if classifier == "rf":
             print("[execute]\tperform model training and cross validation on the training data", flush=True)
-            #model.rf_fit()
+            model.rf_fit()
             print("[execute]\tplotting the bar plot of the feature importance", flush=True)
-            #model.rf_importance()
+            model.rf_importance()
             print("[execute]\tpredicting the a-site from the testing data", flush=True)
-            #model.rf_predict()
+            model.rf_predict()
             print("[execute]\tlocalize the a-site codon and create coverage df/vectors", flush=True)
             model.recover_asite()
 
