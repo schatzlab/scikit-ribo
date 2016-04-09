@@ -20,7 +20,6 @@ import pysam
 import pandas as pd
 import numpy as np
 from collections import defaultdict
-from re import match
 from gtf_preprocess import *
 
 
@@ -34,16 +33,17 @@ class FilterAln:
         self.out_bam_fn = out_bam_fn
         self.read_list = list()
 
+    ## TODO: add a function to see whether there are too many soft-clipped alignment
     def filter(self):
         pysam_hdl = pysam.AlignmentFile(self.in_bam_fn, "rb")
         pysam_ftd = pysam.AlignmentFile(self.out_bam_fn, "wb", template=pysam_hdl)
-
+        
+        ## read a bam file and extract info
         for read in pysam_hdl.fetch():
             cigar_to_exclude = ('I','D','S','H')
             if read.mapping_quality > self.user_mapq and \
                             read.query_length >= 25 and read.query_length <= 35 and \
                             not any(c in read.cigarstring for c in cigar_to_exclude):
-                #match(r'\d\dM$', read.cigarstring):
                 pysam_ftd.write(read)
                 self.read_list.append([read.query_name, read.query_length, read.query_sequence[0:2],
                                        read.query_sequence[-2:][::-1] ]) ## remove read
