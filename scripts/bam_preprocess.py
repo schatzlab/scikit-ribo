@@ -39,9 +39,11 @@ class FilterAln:
         pysam_ftd = pysam.AlignmentFile(self.out_bam_fn, "wb", template=pysam_hdl)
 
         for read in pysam_hdl.fetch():
+            cigar_to_exclude = ('I','D','S','H')
             if read.mapping_quality > self.user_mapq and \
                             read.query_length >= 25 and read.query_length <= 35 and \
-                    match(r'\d\dM$', read.cigarstring):
+                            not any(c in read.cigarstring for c in cigar_to_exclude):
+                #match(r'\d\dM$', read.cigarstring):
                 pysam_ftd.write(read)
                 self.read_list.append([read.query_name, read.query_length, read.query_sequence[0:2],
                                        read.query_sequence[-2:][::-1] ]) ## remove read
@@ -95,7 +97,8 @@ class ConvertBam():
                                                  'gene_chrom', 'gene_start', 'gene_end', 'gene_name', 'gene_score',
                                                  'gene_strand', 'gene_thickStart', 'gene_thickEnd', 'gene_itemRgb',
                                                  'gene_blockCount', 'gene_blockSizes', 'gene_blockStarts'],
-                                          dtype={'gene_blockSizes':'object','gene_blockStarts':'object'})
+                                          dtype={'blockSizes':'object','blockStarts':'object', 
+                                                 'gene_blockSizes':'object','gene_blockStarts':'object'})
 
         ## retrieve the read length and seq information from the bam file
         bam_cds_df_read = pd.merge(bam_cds_df, self.read_df, on='name')
@@ -105,11 +108,12 @@ class ConvertBam():
         bam_cds_df_read['offset'] = bam_cds_df_read['distance'] % 3
 
         ## slice the dataframe to the variables needed for training data
+        
         bam_cds_df_read_out = bam_cds_df_read[[ "read_length", "offset", "start_seq", "end_seq", "gene_chrom", 
                                                 "gene_start", "gene_end", "gene_name", "gene_strand", "chrom", 
                                                 "start", "end", "name", "score", "strand"]] ## remove read
         bam_cds_df_read_out.to_csv(path_or_buf=self.bam + '.cds.txt', sep='\t', header=True, index=False)
-
+        
 
 ## ----------------------------------------
 ## the main work
