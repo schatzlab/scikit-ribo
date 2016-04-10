@@ -34,7 +34,8 @@ class Gtf2Bed:
         self.tpm = tpm
         self.start = None
         self.bedtool = pbt.BedTool(self.gtf)
-        self.prefix = os.path.splitext(self.gtf)[0]
+        self.base=os.path.basename(self.gtf)
+        self.prefix = os.path.splitext(self.base)[0]
         self.gene_bed12s = list()
 
     def convert_gtf(self):
@@ -153,9 +154,9 @@ class Gtf2Bed:
                                                                      "codon_idx", "gene_strand","codon"])
 
     def merge_df(self):
-        ## import the salmon df and merge with cds df
+        ## import the salmon df, rna secondary structure, and merge with cds df
         tpm_df = pd.read_table(self.tpm,  header=0)
-        cds_codonidxs_tpm_df = pd.merge(self.cds_codonidxs_df, tpm_df, how = "left", left_on = ["gene_name"], right_on="Name")
+        cds_codonidxs_tpm_df = pd.merge(self.cds_codonidxs_df, tpm_df, how = "inner", left_on = ["gene_name"], right_on="Name")
         cds_codonidxs_tpm_pairprob_df = pd.merge(cds_codonidxs_tpm_df, self.pairprob_df, how = "inner", on = ["gene_name", "codon_idx"])
         cds_codonidxs_tpm_pairprob_df_out = cds_codonidxs_tpm_pairprob_df[["chrom", "asite_start", "asite_end",
                                                                            "gene_name", "codon_idx", "gene_strand", "codon",
