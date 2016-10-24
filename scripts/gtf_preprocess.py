@@ -112,7 +112,7 @@ class gtf2Bed:
     def createCodonTable(self):
         ## construct the gene level df from the bed12 file
         codons = []
-        pos_ranges_writer = open(self.prefix + "_pos_ranges.txt", "w")
+        pos_ranges_writer = open(self.prefix + ".pos_ranges.txt", "w")
         pos_ranges_writer.write("#gene_name\tstrand\tchrom\tpos_ranges\n")
         for gene_name in self.cds_bt_df.gene_name:
             ## get the info from df
