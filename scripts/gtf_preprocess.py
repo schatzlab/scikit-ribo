@@ -128,41 +128,54 @@ class gtf2Bed:
             exon_sizes = list(map(int, curr["blockSizes"].values[0].split(",")))
 
             ## extract the cds nt index, the order of exons, and save to a nested list
-            pos_ranges = [(gene_start + exon_starts[i], gene_start + exon_starts[i] + exon_sizes[i])
-                          for i in range(len(exon_starts))]
+            pos_ranges = []
+            if gene_strand == "+":
+                phase, distance = 0, 0
+                for i in range(len(exon_starts)):
+                    pos_ranges.append((gene_start + exon_starts[i], gene_start + exon_starts[i] + exon_sizes[i], phase))
+                    distance += exon_sizes[i]
+                    phase = distance % 3
+            elif gene_strand == "-":
+                distance = 0
+                for i in range(len(exon_starts)):
+                    distance += exon_sizes[i]
+                    phase = (3 - (distance % 3)) % 3
+                    pos_ranges.append((gene_start + exon_starts[i], gene_start + exon_starts[i] + exon_sizes[i], phase))
+            #pos_ranges = [(gene_start + exon_starts[i], gene_start + exon_starts[i] + exon_sizes[i])
+            #              for i in range(len(exon_starts))]
 
             ## add 10 codons upstream of a gene 
             upstream_counter = 10
             while upstream_counter > 0:
                 if gene_strand == "+":
-                    pos_ranges_upstream = [(pos_ranges[0][0]-30, pos_ranges[0][0])] + pos_ranges
+                    pos_ranges_upstream = [(pos_ranges[0][0]-30, pos_ranges[0][0], 0)] + pos_ranges
                     for start in range(pos_ranges[0][0]-30, pos_ranges[0][0], 3):
                         codons.append([chrom, start, start+3, gene_name, -upstream_counter, gene_strand, "NA", 0])
                         upstream_counter -= 1
                 else:
-                    pos_ranges_upstream = [(pos_ranges[0][1], pos_ranges[0][1]+30)] + pos_ranges[::-1]
-                    for end in range(pos_ranges[0][1]+30, pos_ranges[0][1], -3):
+                    pos_ranges_upstream = pos_ranges + [(pos_ranges[0][1], pos_ranges[0][1]+30, 0)]
+                    for end in range(pos_ranges[-1][1]+30, pos_ranges[-1][1], -3):
                         codons.append([chrom, end-3, end, gene_name, -upstream_counter, gene_strand, "NA", 0])
                         upstream_counter -= 1
 
             ## create position ranges file for look ups
-            pos_ranges_str = "|".join([ str(i[0]) + "," + str(i[1]) for i in pos_ranges_upstream])
+            pos_ranges_str = "|".join([ str(i[0]) + "," + str(i[1]) + "," + str(i[2]) for i in pos_ranges_upstream])
             pos_ranges_writer.write(gene_name + "\t" + gene_strand + "\t" + chrom + "\t" + pos_ranges_str + "\n")
 
             ## coding region of a gene
             if gene_strand == "+":
-                starts = [start for start_range in pos_ranges for start in range(start_range[0], start_range[1])]
+                starts = [start for pos_range in pos_ranges for start in range(pos_range[0], pos_range[1])]
                 for nt_idx in range(0, len(starts), 3):
                     codon_idx = int(nt_idx/3)
                     codon = self.codons_dict[gene_name][codon_idx]
                     pos = starts[nt_idx]
                     codons.append([chrom, pos, pos+3, gene_name, codon_idx, gene_strand, codon, 0])
             else:
-                ends = [end for start_range in pos_ranges for end in range(start_range[0], start_range[1])]
+                ends = [end for pos_range in pos_ranges for end in range(pos_range[0], pos_range[1])][::-1]
                 for nt_idx in range(0, len(ends), 3):
                     codon_idx = int(nt_idx/3)
                     codon = self.codons_dict[gene_name][codon_idx]
-                    pos = ends[::-1][nt_idx] # make sure to reverse
+                    pos = ends[nt_idx] # make sure to reverse
                     codons.append([chrom, pos-3, pos, gene_name, codon_idx, gene_strand, codon, 0])
 
         ## convert nested list to df
