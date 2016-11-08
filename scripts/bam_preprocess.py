@@ -19,6 +19,7 @@ import pybedtools as pbt
 import pysam
 import pandas as pd
 import numpy as np
+import csv
 from collections import defaultdict
 
 
@@ -39,6 +40,19 @@ class processAln:
         self.orf = self.orf.sort()
         self.posRanges = posRanges
         self.posDic = defaultdict(list)
+
+    def filterRegion(self):
+        # find overlapping regions
+        distinctStartCodons = self.startCodons.merge(c="1,2", o="count").filter(lambda x: int(x[4]) == 1)
+        distinctOrfs = self.orf.merge(c="1,2", o="count").filter(lambda x: int(x[4]) == 1)
+        distinctStartCodons = distinctStartCodons.intersect(distinctOrfs, wa=True, sorted=True)
+        # filter start codon
+        startCodonHash = set([(i[0], i[1], i[2]) for i in distinctStartCodons])
+        self.startCodons = self.startCodons.filter(lambda x: (x[0], x[1], x[2]) in startCodonHash)
+        # filter orf
+        # distinctOrfs = self.orf.merge(c="1,2", o="count").filter(lambda x: int(x[4]) == 1)
+        #orfHash = set([(i[0], i[1], i[2]) for i in distinctOrfs])
+        #self.orf = self.orf.filter(lambda x: (x[0], x[1], x[2]) in orfHash)
 
     ## TODO: add a function to see whether there are too many soft-clipped alignment
     def filterBam(self):
@@ -63,19 +77,10 @@ class processAln:
         self.bedtool = pbt.BedTool(self.outBam)
         self.bedtool = self.bedtool.bam_to_bed(bed12=True).filter(lambda x: x.chrom != 'chrM')
         self.bedtool.saveas(self.outBam + '.bed')
-        return (self.reads)
-
-    def filterRegion(self):
-        distinctStartCodons = self.startCodons.merge(c="1,2", o="count").filter(lambda x: int(x[4]) == 1)
-        distinctOrfs = self.orf.merge(c="1,2", o="count").filter(lambda x: int(x[4]) == 1)
-        distinctStartCodons = distinctStartCodons.intersect(distinctOrfs, wa=True, sorted=True)
-        distinctOrfs = self.orf.merge(c="1,2", o="count").filter(lambda x: int(x[4]) == 1)
-        # filter start codon
-        startCodonHash = set([(i[0], i[1], i[2]) for i in distinctStartCodons])
-        self.startCodons = self.startCodons.filter(lambda x: (x[0], x[1], x[2]) in startCodonHash)
-        # filter orf
-        #orfHash = set([(i[0], i[1], i[2]) for i in distinctOrfs])
-        #self.orf = self.orf.filter(lambda x: (x[0], x[1], x[2]) in orfHash)
+        # export reads to local
+        with open(self.outBam + '.reads.txt', 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile, delimiter='\t')
+            writer.writerows(self.reads)
 
     def posIndex(self):
         ## create a dict to store the position read-frame and index info
@@ -88,10 +93,10 @@ class processAln:
     def sortBam(self):
         self.bedtool = pbt.BedTool(self.outBam)
         self.bedtool = self.bedtool.bam_to_bed(bed12=True)
+        self.bedtool = self.bedtool.sort()
         #tmpfile = self.bedtool._tmp()
         #os.system('sort {0} -k1,1 -nk4,4 > {1}'.format(self.bedtool.fn, tmpfile))
         #self.bedtool = pbt.BedTool(tmpfile)
-        #self.bedtool = self.bedtool.sort()
 
     def training_data(self):
         # intersect with start codons
@@ -102,6 +107,10 @@ class processAln:
                                                           'thickStart', 'thickEnd', 'itemRgb', 'blockCount',
                                                           'blockSizes', 'blockStarts', 'sc_chrom', 'sc_start',
                                                           'sc_end', 'gene_name', 'sc_score', 'gene_strand'])
+        ## temp
+        with open(self.outBam + '.reads.txt', 'r') as f:
+            for line in f:
+                self.reads.append(line.rstrip("\n"))
 
         self.readsDf = pd.DataFrame(self.reads, columns=['name', 'read_length', 'start_nt', 'end_nt'])
 
@@ -121,7 +130,6 @@ class processAln:
         trainingDataOut = trainingDf[["asite", "read_length", "five_offset", "three_offset", "start_nt", "end_nt", "gene_strand"]]
         trainingDataOut.to_csv(path_or_buf=self.outBam + '.asite.txt', sep='\t', header=True, index=False)
 
-    ### TODO: change the offset calculation
     def testing_data(self):
         ## create pandas dataframes from bedtools intersect
         self.bedtool = pbt.BedTool(self.outBam + '.bed')
@@ -155,19 +163,6 @@ class processAln:
                                      "gene_end", "gene_name", "gene_strand", "chrom", "start", "end", "name", "mapq",
                                      "strand"]]
         testingDataOut.to_csv(path_or_buf=self.outBam + '.cds.txt', sep='\t', header=True, index=False)
-
-        ## retrieve the read length and seq information from the bam file
-        #bam_cds_df_read = pd.merge(bam_cds_df, self.reads_df, on='name')
-        #bam_cds_df_read['offset'] = np.where(bam_cds_df_read['gene_strand'] == '+',
-        #                                     bam_cds_df_read['gene_name'] ,
-        #                                     bam_cds_df_read['gene_name'] )
-
-                                               #pos_rf_idx_dict[bam_cds_df_read['gene_name'].values].index(bam_cds_df_read['end'].values) % 3 )
-
-        #                                      pos_rf_idx_dict[bam_cds_df_read['gene_name'].values].index(bam_cds_df_read['start'].values) % 3,
-
-                                               #bam_cds_df_read['gene_start'] - bam_cds_df_read['start'] ,
-                                               #bam_cds_df_read['end'] - bam_cds_df_read['gene_end'] )
 
     def getDistance(self, gene_name, start, end, gene_strand, dic, mode):
         pos_ranges = dic[gene_name][2:]
@@ -228,11 +223,11 @@ if __name__ == '__main__':
               "] and mapq of " + str(mapq), flush=True)
         aln = processAln(in_bam_fn, mapq, out_bam_fn, min_read_length, max_read_length, start_codons, orf, pos_ranges)
         print("[execute]\tfilter out overlapping regions", flush=True)
-        aln.filterRegion()
+        #aln.filterRegion()
         print("[execute]\timport the position ranges", flush=True)
         aln.posIndex()
         print("[execute]\tfilter un-reliable alignment from bam files", flush=True)
-        aln.filterBam()
+        #aln.filterBam()
         print("[execute]\tcreate dataframe - training data", flush=True)
         aln.training_data()
         print("[execute]\tcreate dataframe - testing data", flush=True)
