@@ -50,7 +50,11 @@ class gtf2Bed:
         ## convert a gtf/gff3 file to bed12 and save to a nested list
         for gene_name in gene_names:
             gene_bed12 = self.db.bed12(gene_name, name_field='gene_id')
-            self.gene_bed12s.append(gene_bed12.split("\t"))
+            row = gene_bed12.split("\t")
+            self.gene_bed12s.append([row[0], int(row[1]), int(row[2])] + row[3:])
+
+        ## sort the file
+        self.gene_bed12s = sorted(self.gene_bed12s, key = lambda x: (x[0], x[1], x[2]))
 
         ## extract CDS entries, write to a bed12 file
         with open( self.prefix + '.sort.CDS.bed', 'w', newline='') as csvfile:
@@ -136,14 +140,14 @@ class gtf2Bed:
                         codons.append([chrom, start, start+3, gene_name, -upstream_counter, gene_strand, "NA", 0])
                         upstream_counter -= 1
                 else:
-                    pos_ranges_upstream = [(pos_ranges[0][1]+30, pos_ranges[0][1])] + pos_ranges[::-1]
+                    pos_ranges_upstream = [(pos_ranges[0][1], pos_ranges[0][1]+30)] + pos_ranges[::-1]
                     for end in range(pos_ranges[0][1]+30, pos_ranges[0][1], -3):
                         codons.append([chrom, end-3, end, gene_name, -upstream_counter, gene_strand, "NA", 0])
                         upstream_counter -= 1
 
             ## create position ranges file for look ups
-            pos_ranges_writer.write(gene_name + "\t" + gene_strand + "\t" + chrom + "\t" +
-                                    str(pos_ranges_upstream).strip('[]') + "\n")
+            pos_ranges_str = "|".join([ str(i[0]) + "," + str(i[1]) for i in pos_ranges_upstream])
+            pos_ranges_writer.write(gene_name + "\t" + gene_strand + "\t" + chrom + "\t" + pos_ranges_str + "\n")
 
             ## coding region of a gene
             if gene_strand == "+":
