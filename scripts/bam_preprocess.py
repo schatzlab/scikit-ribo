@@ -8,7 +8,7 @@
 ## author: Han Fang 
 ## contact: hanfang.cshl@gmail.com
 ## website: hanfang.github.io
-## date: 1/28/2016
+## date: 10/28/2016
 ## ----------------------------------------
 
 from __future__ import print_function, division
@@ -20,100 +20,172 @@ import pysam
 import pandas as pd
 import numpy as np
 from collections import defaultdict
-from gtf_preprocess import *
 
 
-class FilterAln:
-    ''' define a class for extracting alignment based on MAPQ (>10) and read length meets [25,35]
+class processAln:
+    '''extracting alignment based on MAPQ and read length, prepare training/testing data
     '''
 
-    def __init__(self, in_bam_fn, user_mapq, out_bam_fn):
-        self.in_bam_fn = in_bam_fn
-        self.user_mapq = user_mapq
-        self.out_bam_fn = out_bam_fn
-        self.read_list = list()
+    def __init__(self, inBam, mapq, outBam, minRL, maxRL, startCodons, orf, posRanges):
+        self.inBam = inBam
+        self.mapq = mapq
+        self.outBam = outBam
+        self.minRL = minRL
+        self.maxRL = maxRL
+        self.reads = []
+        self.startCodons = pbt.BedTool(startCodons).filter(lambda x: x.chrom != 'chrM')
+        self.startCodons = self.startCodons.sort()
+        self.orf = pbt.BedTool(orf).filter(lambda x: x.chrom != 'chrM')
+        self.orf = self.orf.sort()
+        self.posRanges = posRanges
+        self.posDic = defaultdict(list)
 
     ## TODO: add a function to see whether there are too many soft-clipped alignment
-    def filter(self):
-        pysam_hdl = pysam.AlignmentFile(self.in_bam_fn, "rb")
-        pysam_ftd = pysam.AlignmentFile(self.out_bam_fn, "wb", template=pysam_hdl)
-        
+    def filterBam(self):
+        # create a template/header from the input bam file
+        inBamHdl = pysam.AlignmentFile(self.inBam, "rb")
+        outBamHdl = pysam.AlignmentFile(self.outBam, "wb", template=inBamHdl)
         ## read a bam file and extract info
-        for read in pysam_hdl.fetch():
-            cigar_to_exclude = ('I','D','S','H')
-            if read.mapping_quality > self.user_mapq and \
-                            read.query_length >= 25 and read.query_length <= 35 and \
-                            not any(c in read.cigarstring for c in cigar_to_exclude):
-                pysam_ftd.write(read)
-                self.read_list.append([read.query_name, read.query_length, read.query_sequence[0:2],
-                                       read.query_sequence[-2:][::-1] ]) ## remove read
-        return (self.read_list)
-        pysam_ftd.close()
-        pysam_hdl.close()
+        for read in inBamHdl.fetch():
+            cigar_to_exclude = set(['I','D','S','H'])
+            start_nt, end_nt = read.query_sequence[:2], read.query_sequence[-2:]
+            edges = set(list(start_nt + end_nt))
+            # filter the bam file
+            if read.mapping_quality > self.mapq and \
+            self.minRL <= read.query_length <= self.maxRL and \
+            not any(c in cigar_to_exclude for c in read.cigarstring) and \
+            'N' not in edges:
+                outBamHdl.write(read)
+                self.reads.append([read.query_name, read.query_length, start_nt, end_nt[::-1]])
+        inBamHdl.close()
+        outBamHdl.close()
+        # save the bedtool to local
+        self.bedtool = pbt.BedTool(self.outBam)
+        self.bedtool = self.bedtool.bam_to_bed(bed12=True).filter(lambda x: x.chrom != 'chrM')
+        self.bedtool.saveas(self.outBam + '.bed')
+        return (self.reads)
 
+    def filterRegion(self):
+        distinctStartCodons = self.startCodons.merge(c="1,2", o="count").filter(lambda x: int(x[4]) == 1)
+        distinctOrfs = self.orf.merge(c="1,2", o="count").filter(lambda x: int(x[4]) == 1)
+        distinctStartCodons = distinctStartCodons.intersect(distinctOrfs, wa=True, sorted=True)
+        distinctOrfs = self.orf.merge(c="1,2", o="count").filter(lambda x: int(x[4]) == 1)
+        # filter start codon
+        startCodonHash = set([(i[0], i[1], i[2]) for i in distinctStartCodons])
+        self.startCodons = self.startCodons.filter(lambda x: (x[0], x[1], x[2]) in startCodonHash)
+        # filter orf
+        #orfHash = set([(i[0], i[1], i[2]) for i in distinctOrfs])
+        #self.orf = self.orf.filter(lambda x: (x[0], x[1], x[2]) in orfHash)
 
-class ConvertBam():
-    ''' prepare a pandas df of training data from the alignment
-    '''
+    def posIndex(self):
+        ## create a dict to store the position read-frame and index info
+        with open(self.posRanges, 'r') as f:
+            next(f)
+            for line in f:
+                gene, strand, chrom, ranges = line.rstrip("\n").split("\t")
+                self.posDic[gene] = [strand, chrom] + [int(i) for j in ranges.split("|") for i in j.split(",")]
 
-    def __init__(self, object, sc_bed, cds_bed, bam):
-        self.sc_bed = pbt.BedTool(sc_bed)
-        self.cds_bed = pbt.BedTool(cds_bed)
-        self.bam = bam
-        self.bt_hdl = pbt.BedTool(self.bam).bam_to_bed(stream=True, bed12=True).sort()
-        self.read_list = object.read_list
-        self.read_df = pd.DataFrame(self.read_list, columns=['name', 'read_length', 'start_seq', 'end_seq']) ## remove read
-
+    def sortBam(self):
+        self.bedtool = pbt.BedTool(self.outBam)
+        self.bedtool = self.bedtool.bam_to_bed(bed12=True)
+        #tmpfile = self.bedtool._tmp()
+        #os.system('sort {0} -k1,1 -nk4,4 > {1}'.format(self.bedtool.fn, tmpfile))
+        #self.bedtool = pbt.BedTool(tmpfile)
+        #self.bedtool = self.bedtool.sort()
 
     def training_data(self):
-        ## create pandas dataframes
-        bam_start = self.bt_hdl.intersect(self.sc_bed, wa=True, wb=True, sorted=True)
-        bam_start_df = bam_start.to_dataframe(names=['chrom', 'start', 'end', 'name', 'score', 'strand', 'thickStart',
-                                                     'thickEnd', 'itemRgb', 'blockCount', 'blockSizes', 'blockStarts',
-                                                     'sc_chrom', 'sc_start', 'sc_end', 'gene_name', 'sc_score',
-                                                     'gene_strand'])
+        # intersect with start codons
+        self.bedtool = pbt.BedTool(self.outBam + '.bed')
+        trainingData = self.bedtool.intersect(self.startCodons, wa=True, wb=True, sorted=True)
+
+        trainingDf = trainingData.to_dataframe(names=['chrom', 'start', 'end', 'name', 'score', 'strand',
+                                                          'thickStart', 'thickEnd', 'itemRgb', 'blockCount',
+                                                          'blockSizes', 'blockStarts', 'sc_chrom', 'sc_start',
+                                                          'sc_end', 'gene_name', 'sc_score', 'gene_strand'])
+
+        self.readsDf = pd.DataFrame(self.reads, columns=['name', 'read_length', 'start_nt', 'end_nt'])
 
         ## retrieve the read length and seq information from the bam file
-        bam_start_df_read = pd.merge(bam_start_df, self.read_df, on='name')
-        bam_start_df_read['asite'] = np.where(bam_start_df_read['gene_strand'] == '+',
-                                               bam_start_df_read['sc_start'] - bam_start_df_read['start'] + 3,
-                                               bam_start_df_read['end'] - bam_start_df_read['sc_end'] + 3 )
-        bam_start_df_read['offset'] = bam_start_df_read['asite'] % 3
-
+        trainingDf = pd.merge(trainingDf, self.readsDf, on='name')
+        trainingDf['asite'] = np.where(trainingDf['gene_strand'] == '+',
+                                       trainingDf['sc_start'] - trainingDf['start'] + 3,
+                                       trainingDf['end'] - trainingDf['sc_end'] + 3 )
+        trainingDf['three_distance'] = np.where(trainingDf['gene_strand'] == '+',
+                                                trainingDf['sc_start'] - trainingDf['end'] + 3,
+                                                trainingDf['start'] - trainingDf['sc_end'] + 3 )
+        trainingDf['five_offset'] = trainingDf['asite']  % 3 ## +1 ?
+        trainingDf['three_offset'] = trainingDf['three_distance'] % 3
         ## filter a read by whether it has a-site that satisfies [12,18]
-        bam_start_df_read_filter = bam_start_df_read[((bam_start_df_read['asite'] >= 12) &
-                                                      (bam_start_df_read['asite'] <= 18))]
+        trainingDf = trainingDf[((trainingDf['asite'] >= 12) & (trainingDf['asite'] <= 18))]
+        ## slice the dataframe to the variables needed for training data
+        trainingDataOut = trainingDf[["asite", "read_length", "five_offset", "three_offset", "start_nt", "end_nt", "gene_strand"]]
+        trainingDataOut.to_csv(path_or_buf=self.outBam + '.asite.txt', sep='\t', header=True, index=False)
+
+    ### TODO: change the offset calculation
+    def testing_data(self):
+        ## create pandas dataframes from bedtools intersect
+        self.bedtool = pbt.BedTool(self.outBam + '.bed')
+        testingData = self.bedtool.intersect(self.orf, wa=True, wb=True, sorted=True) #, stream=True)
+        n = 0
+
+        testingDf = testingData.to_dataframe(names=['chrom', 'start', 'end', 'name', 'mapq', 'strand', 'thickStart',
+                                                    'thickEnd', 'itemRgb', 'blockCount', 'blockSizes', 'blockStarts',
+                                                    'gene_chrom', 'gene_start', 'gene_end', 'gene_name', 'gene_score',
+                                                    'gene_strand', 'gene_thickStart', 'gene_thickEnd', 'gene_itemRgb',
+                                                    'gene_blockCount', 'gene_blockSizes', 'gene_blockStarts'])
+        #print(testingDf)
+        testingDf['five_distance'] = testingDf.apply(lambda row: self.getDistance(row['gene_name'],
+                                                                                  row['start'],
+                                                                                  row['end'],
+                                                                                  row['gene_strand'],
+                                                                                  self.posDic,
+                                                                                  "five"), axis=1)
+        testingDf['three_distance'] = testingDf.apply(lambda row: self.getDistance(row['gene_name'],
+                                                                                   row['start'],
+                                                                                   row['end'],
+                                                                                   row['gene_strand'],
+                                                                                   self.posDic,
+                                                                                   "three"), axis=1)
+        testingDf['five_offset'] = testingDf['five_distance'] % 3
+        testingDf['three_offset'] = testingDf['three_distance'] % 3
+        testingDf = pd.merge(testingDf, self.readsDf, on='name')
 
         ## slice the dataframe to the variables needed for training data
-        bam_start_df_read_filter_out = bam_start_df_read_filter[
-            ["asite", "read_length", "offset", "start_seq", "end_seq", "gene_strand"]]
-        bam_start_df_read_filter_out.to_csv(path_or_buf=self.bam + '.asite.txt', sep='\t', header=True, index=False)
-
-    def testing_data(self):
-        ## create pandas dataframes from bedtools intersect, /*important*/ to use split=True here
-        bam_cds = self.bt_hdl.intersect(self.cds_bed, wa=True, wb=True, split=True) #sorted=True,
-        bam_cds_df = bam_cds.to_dataframe(names=['chrom', 'start', 'end', 'name', 'score', 'strand', 'thickStart',
-                                                 'thickEnd', 'itemRgb', 'blockCount', 'blockSizes', 'blockStarts',
-                                                 'gene_chrom', 'gene_start', 'gene_end', 'gene_name', 'gene_score',
-                                                 'gene_strand', 'gene_thickStart', 'gene_thickEnd', 'gene_itemRgb',
-                                                 'gene_blockCount', 'gene_blockSizes', 'gene_blockStarts'],
-                                          dtype={'blockSizes':'object','blockStarts':'object', 
-                                                 'gene_blockSizes':'object','gene_blockStarts':'object'})
+        testingDataOut = testingDf[[ "read_length", "five_offset", "three_offset", "start_nt", "end_nt", "gene_start",
+                                     "gene_end", "gene_name", "gene_strand", "chrom", "start", "end", "name", "mapq",
+                                     "strand"]]
+        testingDataOut.to_csv(path_or_buf=self.outBam + '.cds.txt', sep='\t', header=True, index=False)
 
         ## retrieve the read length and seq information from the bam file
-        bam_cds_df_read = pd.merge(bam_cds_df, self.read_df, on='name')
-        bam_cds_df_read['distance'] = np.where(bam_cds_df_read['gene_strand'] == '+',
-                                               bam_cds_df_read['gene_start'] - bam_cds_df_read['start'] ,
-                                               bam_cds_df_read['end'] - bam_cds_df_read['gene_end'] )
-        bam_cds_df_read['offset'] = bam_cds_df_read['distance'] % 3
+        #bam_cds_df_read = pd.merge(bam_cds_df, self.reads_df, on='name')
+        #bam_cds_df_read['offset'] = np.where(bam_cds_df_read['gene_strand'] == '+',
+        #                                     bam_cds_df_read['gene_name'] ,
+        #                                     bam_cds_df_read['gene_name'] )
 
-        ## slice the dataframe to the variables needed for training data
-        
-        bam_cds_df_read_out = bam_cds_df_read[[ "read_length", "offset", "start_seq", "end_seq", "gene_chrom", 
-                                                "gene_start", "gene_end", "gene_name", "gene_strand", "chrom", 
-                                                "start", "end", "name", "score", "strand"]] ## remove read
-        bam_cds_df_read_out.to_csv(path_or_buf=self.bam + '.cds.txt', sep='\t', header=True, index=False)
-        
+                                               #pos_rf_idx_dict[bam_cds_df_read['gene_name'].values].index(bam_cds_df_read['end'].values) % 3 )
+
+        #                                      pos_rf_idx_dict[bam_cds_df_read['gene_name'].values].index(bam_cds_df_read['start'].values) % 3,
+
+                                               #bam_cds_df_read['gene_start'] - bam_cds_df_read['start'] ,
+                                               #bam_cds_df_read['end'] - bam_cds_df_read['gene_end'] )
+
+    def getDistance(self, gene_name, start, end, gene_strand, dic, mode):
+        pos_ranges = dic[gene_name][2:]
+        num_regions = int(len(pos_ranges) / 2)
+        if mode == "five":
+            if gene_strand == "+":
+                positions = [pos for i in range(num_regions+1) for pos in range(pos_ranges[i], pos_ranges[i+1])]
+                return positions.index(start+15)
+            elif gene_strand == "-":
+                positions = [pos for i in range(num_regions+1) for pos in range(pos_ranges[i+1], pos_ranges[i])]
+                return positions.index(end-15)
+        elif mode == "three":
+            if gene_strand == "+":
+                positions = [pos for i in range(num_regions+1) for pos in range(pos_ranges[i], pos_ranges[i+1])]
+                return positions.index(end)
+            elif gene_strand == "-":
+                positions = [pos for i in range(num_regions+1) for pos in range(pos_ranges[i+1], pos_ranges[i])]
+                return positions.index(start)
 
 ## ----------------------------------------
 ## the main work
@@ -121,10 +193,11 @@ class ConvertBam():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", help="input bam file")
-    parser.add_argument("-b", help="a BED file with start codons")
-    parser.add_argument("-g", help="a BED file with CDS (gene) entries")
-    parser.add_argument("-q", help="minimum mapq allowed", default=20, type=int)
-    parser.add_argument("-o", help="output bam file")
+    parser.add_argument("-p", help="prefix for BED/index files")
+    parser.add_argument("-q", help="minimum mapq allowed, Default: 20", default=20, type=int)
+    parser.add_argument("-l", help="shortest read length allowed, Default: 25", default=25, type=int)
+    parser.add_argument("-u", help="longest read length allowed, Default: 35", default=35, type=int)
+    parser.add_argument("-o", help="output filtered bam file")
 
     ## check if there is any argument
     if len(sys.argv) <= 1:
@@ -134,28 +207,37 @@ if __name__ == '__main__':
         args = parser.parse_args()
 
     ## process the file if the input files exist
-    if (args.i != None and
-                args.b != None and
-                args.b != None and
-                args.o != None):
-
-        print("[status]\tprocessing the input bam file: " + args.i, flush=True)
+    if (args.i != None and args.p != None and args.o != None):
+        ## specify inputs
         in_bam_fn = args.i
-        user_mapq = args.q
+        mapq = args.q
         out_bam_fn = args.o
-        start_bed_fl = args.b
-        cds_bed_fl = args.g
+        min_read_length = args.l
+        max_read_length = args.u
+        start_codons = args.p + ".sort.start.bed"
+        orf = args.p + ".sort.CDS.bed"
+        pos_ranges = args.p + ".pos_ranges.txt"
+        print("[status]\tprocessing the input bam file: " + in_bam_fn, flush=True)
+        print("[status]\toutput bam file name: " + out_bam_fn, flush=True)
+        print("[status]\treading the start codon BED file: " + start_codons, flush=True)
+        print("[status]\treading the open reading frame codon BED file: " + orf, flush=True)
+        print("[status]\treading the position and reading-frame index file: " + pos_ranges, flush=True)
 
-        print("[execute]\tfilter by read length between [25,35] and mapq of " + str(user_mapq), flush=True)
-        fetch_aln = FilterAln(in_bam_fn, user_mapq, out_bam_fn)
-        fetch_aln.filter()
-
-        print("[execute]\tstart converting the filtered bam file", flush=True)
-        converted_bam = ConvertBam(fetch_aln, start_bed_fl, cds_bed_fl, out_bam_fn)
-        print("[execute]\tconstruct pandas dataframe of training data", flush=True)
-        converted_bam.training_data()
-        print("[execute]\tconstruct pandas dataframe of testing data", flush=True)
-        converted_bam.testing_data()
+        ## filter alignment
+        print("[execute]\tfilter by read length between [" + str(min_read_length) + "," + str(max_read_length) +
+              "] and mapq of " + str(mapq), flush=True)
+        aln = processAln(in_bam_fn, mapq, out_bam_fn, min_read_length, max_read_length, start_codons, orf, pos_ranges)
+        print("[execute]\tfilter out overlapping regions", flush=True)
+        aln.filterRegion()
+        print("[execute]\timport the position ranges", flush=True)
+        aln.posIndex()
+        print("[execute]\tfilter un-reliable alignment from bam files", flush=True)
+        aln.filterBam()
+        print("[execute]\tcreate dataframe - training data", flush=True)
+        aln.training_data()
+        print("[execute]\tcreate dataframe - testing data", flush=True)
+        aln.testing_data()
+        #converted_bam = convertBam(fetch_aln, start_codons, orf, out_bam_fn, pos_rf_fn)
 
     else:
         print("[error]\tmissing argument", flush=True)
