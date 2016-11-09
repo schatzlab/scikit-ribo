@@ -23,7 +23,7 @@ import csv
 from collections import defaultdict
 
 
-class processAln:
+class processAln(object):
     '''extracting alignment based on MAPQ and read length, prepare training/testing data
     '''
 
@@ -40,6 +40,10 @@ class processAln:
         self.orf = self.orf.sort()
         self.posRanges = posRanges
         self.posDic = defaultdict(list)
+        ## temp
+        #with open(self.outBam + '.reads.txt', 'r') as f:
+        #    for line in f:
+        #        self.reads.append(line.rstrip("\n").split("\t"))
 
     def filterRegion(self):
         # find overlapping regions
@@ -87,8 +91,8 @@ class processAln:
         with open(self.posRanges, 'r') as f:
             next(f)
             for line in f:
-                gene, strand, chrom, ranges = line.rstrip("\n").split("\t")
-                self.posDic[gene] = [strand, chrom] + [int(i) for j in ranges.split("|") for i in j.split(",")]
+                gene, ranges = line.rstrip("\n").split("\t")
+                self.posDic[gene] = [(int(i[0]), int(i[1]), int(i[2])) for i in [j.split(",") for j in ranges.split("|") ]]
 
     def sortBam(self):
         self.bedtool = pbt.BedTool(self.outBam)
@@ -103,14 +107,10 @@ class processAln:
         self.bedtool = pbt.BedTool(self.outBam + '.bed')
         trainingData = self.bedtool.intersect(self.startCodons, wa=True, wb=True, sorted=True)
 
-        trainingDf = trainingData.to_dataframe(names=['chrom', 'start', 'end', 'name', 'score', 'strand',
-                                                          'thickStart', 'thickEnd', 'itemRgb', 'blockCount',
-                                                          'blockSizes', 'blockStarts', 'sc_chrom', 'sc_start',
-                                                          'sc_end', 'gene_name', 'sc_score', 'gene_strand'])
-        ## temp
-        with open(self.outBam + '.reads.txt', 'r') as f:
-            for line in f:
-                self.reads.append(line.rstrip("\n"))
+        trainingDf = trainingData.to_dataframe(names=['chrom', 'start', 'end', 'name', 'score', 'strand', 'thickStart',
+                                                      'thickEnd', 'itemRgb', 'blockCount', 'blockSizes', 'blockStarts',
+                                                      'sc_chrom', 'sc_start', 'sc_end', 'gene_name', 'sc_score',
+                                                      'gene_strand'])
 
         self.readsDf = pd.DataFrame(self.reads, columns=['name', 'read_length', 'start_nt', 'end_nt'])
 
@@ -131,33 +131,25 @@ class processAln:
         trainingDataOut.to_csv(path_or_buf=self.outBam + '.asite.txt', sep='\t', header=True, index=False)
 
     def testing_data(self):
-        ## create pandas dataframes from bedtools intersect
+        ## create pandas df from bedtools intersect
         self.bedtool = pbt.BedTool(self.outBam + '.bed')
-        testingData = self.bedtool.intersect(self.orf, wa=True, wb=True, sorted=True) #, stream=True)
-        n = 0
-
+        testingData = self.bedtool.intersect(self.orf, wa=True, wb=True, sorted=True)
         testingDf = testingData.to_dataframe(names=['chrom', 'start', 'end', 'name', 'mapq', 'strand', 'thickStart',
                                                     'thickEnd', 'itemRgb', 'blockCount', 'blockSizes', 'blockStarts',
                                                     'gene_chrom', 'gene_start', 'gene_end', 'gene_name', 'gene_score',
                                                     'gene_strand', 'gene_thickStart', 'gene_thickEnd', 'gene_itemRgb',
-                                                    'gene_blockCount', 'gene_blockSizes', 'gene_blockStarts'])
-        #print(testingDf)
-        testingDf['five_distance'] = testingDf.apply(lambda row: self.getDistance(row['gene_name'],
-                                                                                  row['start'],
-                                                                                  row['end'],
-                                                                                  row['gene_strand'],
-                                                                                  self.posDic,
-                                                                                  "five"), axis=1)
-        testingDf['three_distance'] = testingDf.apply(lambda row: self.getDistance(row['gene_name'],
-                                                                                   row['start'],
-                                                                                   row['end'],
-                                                                                   row['gene_strand'],
-                                                                                   self.posDic,
-                                                                                   "three"), axis=1)
-        testingDf['five_offset'] = testingDf['five_distance'] % 3
-        testingDf['three_offset'] = testingDf['three_distance'] % 3
-        testingDf = pd.merge(testingDf, self.readsDf, on='name')
-
+                                                    'gene_blockCount', 'gene_blockSizes', 'gene_blockStarts'],
+                                             dtype={'blockSizes':'object','blockStarts':'object',
+                                                    'gene_blockSizes':'object','gene_blockStarts':'object'})
+        ## compute offset
+        testingDf['five_offset'] = testingDf.apply(lambda x: self.getDistance(x['gene_name'], x['start'], x['end'],
+                                                                              x['gene_strand'], self.posDic, "five"),
+                                                     axis=1)
+        testingDf['three_offset'] = testingDf.apply(lambda x: self.getDistance(x['gene_name'], x['start'], x['end'],
+                                                                               x['gene_strand'], self.posDic, "three"),
+                                                      axis=1)
+        testingDf = testingDf[(testingDf['five_offset'] != -1) & (testingDf['three_offset'] != -1)]
+        testingDf = pd.merge(testingDf, self.readsDf, on='name', how = 'inner')
         ## slice the dataframe to the variables needed for training data
         testingDataOut = testingDf[[ "read_length", "five_offset", "three_offset", "start_nt", "end_nt", "gene_start",
                                      "gene_end", "gene_name", "gene_strand", "chrom", "start", "end", "name", "mapq",
@@ -165,22 +157,33 @@ class processAln:
         testingDataOut.to_csv(path_or_buf=self.outBam + '.cds.txt', sep='\t', header=True, index=False)
 
     def getDistance(self, gene_name, start, end, gene_strand, dic, mode):
-        pos_ranges = dic[gene_name][2:]
-        num_regions = int(len(pos_ranges) / 2)
+        pos_ranges = dic[gene_name]
+        if gene_strand == "-": pos_ranges = pos_ranges[::-1]
+        num_regions = len(pos_ranges)
         if mode == "five":
             if gene_strand == "+":
-                positions = [pos for i in range(num_regions+1) for pos in range(pos_ranges[i], pos_ranges[i+1])]
-                return positions.index(start+15)
-            elif gene_strand == "-":
-                positions = [pos for i in range(num_regions+1) for pos in range(pos_ranges[i+1], pos_ranges[i])]
-                return positions.index(end-15)
+                pos = start + 15
+            else:
+                pos = end - 15
+            return self.offsetHelper(num_regions, pos_ranges, gene_strand, pos)
         elif mode == "three":
             if gene_strand == "+":
-                positions = [pos for i in range(num_regions+1) for pos in range(pos_ranges[i], pos_ranges[i+1])]
-                return positions.index(end)
-            elif gene_strand == "-":
-                positions = [pos for i in range(num_regions+1) for pos in range(pos_ranges[i+1], pos_ranges[i])]
-                return positions.index(start)
+                pos = end - 12
+            else:
+                pos = start + 12
+            return self.offsetHelper(num_regions, pos_ranges, gene_strand, pos)
+
+    def offsetHelper(self, numRegions, posRanges, geneStrand, pos):
+            i = 0
+            while i < numRegions:
+                left, right, phase = posRanges[i]
+                if left <= pos <= right:
+                    up = left if geneStrand == "+" else right
+                    offset = ( abs(pos - up) + phase) % 3
+                    return offset
+                else:
+                    i += 1
+            return -1
 
 ## ----------------------------------------
 ## the main work
@@ -216,23 +219,22 @@ if __name__ == '__main__':
         print("[status]\toutput bam file name: " + out_bam_fn, flush=True)
         print("[status]\treading the start codon BED file: " + start_codons, flush=True)
         print("[status]\treading the open reading frame codon BED file: " + orf, flush=True)
-        print("[status]\treading the position and reading-frame index file: " + pos_ranges, flush=True)
+        print("[status]\treading the position-phase file: " + pos_ranges, flush=True)
 
         ## filter alignment
-        print("[execute]\tfilter by read length between [" + str(min_read_length) + "," + str(max_read_length) +
+        print("[execute]\tkeep only reads with length between [" + str(min_read_length) + "," + str(max_read_length) +
               "] and mapq of " + str(mapq), flush=True)
         aln = processAln(in_bam_fn, mapq, out_bam_fn, min_read_length, max_read_length, start_codons, orf, pos_ranges)
         print("[execute]\tfilter out overlapping regions", flush=True)
-        #aln.filterRegion()
+        aln.filterRegion()
         print("[execute]\timport the position ranges", flush=True)
         aln.posIndex()
-        print("[execute]\tfilter un-reliable alignment from bam files", flush=True)
-        #aln.filterBam()
+        print("[execute]\tfilter out un-reliable alignment from bam files", flush=True)
+        aln.filterBam()
         print("[execute]\tcreate dataframe - training data", flush=True)
         aln.training_data()
         print("[execute]\tcreate dataframe - testing data", flush=True)
         aln.testing_data()
-        #converted_bam = convertBam(fetch_aln, start_codons, orf, out_bam_fn, pos_rf_fn)
 
     else:
         print("[error]\tmissing argument", flush=True)

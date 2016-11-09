@@ -24,7 +24,7 @@ from pybedtools.featurefuncs import gff2bed
 from itertools import groupby
 
 
-class gtf2Bed:
+class gtf2Bed(object):
     ''' class to sort and get start codon from a gtf file
     '''
     def __init__(self, gtf, fasta, pairprob, tpm):
@@ -117,7 +117,7 @@ class gtf2Bed:
         ## construct the gene level df from the bed12 file
         codons = []
         pos_ranges_writer = open(self.prefix + ".pos_ranges.txt", "w")
-        pos_ranges_writer.write("#gene_name\tstrand\tchrom\tpos_ranges\n")
+        pos_ranges_writer.write("#gene_name\tpos_ranges\n")
         for gene_name in self.cds_bt_df.gene_name:
             ## get the info from df
             curr = self.cds_bt_df.loc[self.cds_bt_df["gene_name"] == gene_name]
@@ -141,8 +141,6 @@ class gtf2Bed:
                     distance += exon_sizes[i]
                     phase = (3 - (distance % 3)) % 3
                     pos_ranges.append((gene_start + exon_starts[i], gene_start + exon_starts[i] + exon_sizes[i], phase))
-            #pos_ranges = [(gene_start + exon_starts[i], gene_start + exon_starts[i] + exon_sizes[i])
-            #              for i in range(len(exon_starts))]
 
             ## add 10 codons upstream of a gene 
             upstream_counter = 10
@@ -160,7 +158,7 @@ class gtf2Bed:
 
             ## create position ranges file for look ups
             pos_ranges_str = "|".join([ str(i[0]) + "," + str(i[1]) + "," + str(i[2]) for i in pos_ranges_upstream])
-            pos_ranges_writer.write(gene_name + "\t" + gene_strand + "\t" + chrom + "\t" + pos_ranges_str + "\n")
+            pos_ranges_writer.write(gene_name + "\t" + pos_ranges_str + "\n")
 
             ## coding region of a gene
             if gene_strand == "+":
@@ -171,11 +169,11 @@ class gtf2Bed:
                     pos = starts[nt_idx]
                     codons.append([chrom, pos, pos+3, gene_name, codon_idx, gene_strand, codon, 0])
             else:
-                ends = [end for pos_range in pos_ranges for end in range(pos_range[0], pos_range[1])][::-1]
+                ends = [end for pos_range in pos_ranges for end in range(pos_range[0], pos_range[1])][::-1] #  reverse
                 for nt_idx in range(0, len(ends), 3):
                     codon_idx = int(nt_idx/3)
                     codon = self.codons_dict[gene_name][codon_idx]
-                    pos = ends[nt_idx] # make sure to reverse
+                    pos = ends[nt_idx]
                     codons.append([chrom, pos-3, pos, gene_name, codon_idx, gene_strand, codon, 0])
 
         ## convert nested list to df
