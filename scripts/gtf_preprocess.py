@@ -27,167 +27,166 @@ from itertools import groupby
 class gtf2Bed(object):
     ''' class to sort and get start codon from a gtf file
     '''
-    def __init__(self, gtf, fasta, pairprob, tpm):
+    def __init__(self, gtf, fasta, pairprobFn, tpm):
         self.gtf = gtf
         self.fasta = fasta
-        self.pairprob = pairprob
+        self.pairprobFn = pairprobFn
         self.tpm = tpm
         self.bedtool = pbt.BedTool(self.gtf)
-        self.base=os.path.basename(self.gtf)
+        self.base = os.path.basename(self.gtf)
         self.prefix = os.path.splitext(self.base)[0]
-        self.gene_bed12s = []
+        self.geneBed12s = []
 
     def convertGtf(self):
         ## create a db from the gtf file
         self.db = gffutils.create_db(self.gtf, ":memory:", force=True)
 
         ## retrieve a list of gene names with type "CDS" from db
-        gene_names = []
+        geneNames = []
         for gene in self.db.features_of_type("CDS", order_by=("seqid","start") ):
-            gene_names.append(gene['gene_id'][0])
-        gene_names = list(set(gene_names))
+            geneNames.append(gene['gene_id'][0])
+        geneNames = list(set(geneNames))
 
         ## convert a gtf/gff3 file to bed12 and save to a nested list
-        for gene_name in gene_names:
-            gene_bed12 = self.db.bed12(gene_name, name_field='gene_id')
-            row = gene_bed12.split("\t")
-            self.gene_bed12s.append([row[0], int(row[1]), int(row[2])] + row[3:])
+        for geneName in geneNames:
+            geneBed12 = self.db.bed12(geneName, name_field='gene_id')
+            row = geneBed12.split("\t")
+            self.geneBed12s.append([row[0], int(row[1]), int(row[2])] + row[3:])
 
         ## sort the file
-        self.gene_bed12s = sorted(self.gene_bed12s, key = lambda x: (x[0], x[1], x[2]))
+        self.geneBed12s = sorted(self.geneBed12s, key = lambda x: (x[0], x[1], x[2]))
 
         ## extract CDS entries, write to a bed12 file
-        with open( self.prefix + '.sort.CDS.bed', 'w', newline='') as csvfile:
+        with open(self.prefix + '.sort.CDS.bed', 'w', newline='') as csvfile:
             writer = csv.writer(csvfile, delimiter='\t')
-            writer.writerows(self.gene_bed12s)
+            writer.writerows(self.geneBed12s)
 
     def getStartCodon(self):
         ## return a set of feature types
-        feature_types = set(list(self.db.featuretypes()))
+        featureTypes = set(list(self.db.featuretypes()))
 
         ## sort by coordinates, extract start codon entries, save the records to a bed file
-        if "start_codon" in feature_types:
-            self.bedtool_sort = self.bedtool.sort() # sort the entries
-            self.start_codon = self.bedtool_sort.filter(lambda x: x[2] == "start_codon")
-            self.start_codon_bed = self.start_codon.each(gff2bed).saveas(self.prefix + '.sort.start.bed')
+        if "start_codon" in featureTypes:
+            self.bedtool = self.bedtool.sort() # sort the entries
+            self.startCodon = self.bedtool.filter(lambda x: x[2] == "start_codon")
+            self.startCodonBed = self.startCodon.each(gff2bed).saveas(self.prefix + '.sort.start.bed')
         else:
-            gene_bed6s = []
-            for bed12 in self.gene_bed12s:
+            geneBed6s = []
+            for bed12 in self.geneBed12s:
                 bed6 = bed12[0:6]
                 bed6[2] = int(bed6[1]) + 3
-                gene_bed6s.append(bed6)
-            with open( self.prefix + '.sort.start.bed', 'w', newline='') as csvfile:
+                geneBed6s.append(bed6)
+            with open(self.prefix + '.sort.start.bed', 'w', newline='') as csvfile:
                 writer = csv.writer(csvfile, delimiter='\t')
-                writer.writerows(gene_bed6s)
+                writer.writerows(geneBed6s)
 
     def transformPairProb(self):
         ## read the pairing prob arrays then convert it to a df
-        pairprob = []
-        with open(self.pairprob, 'r') as csv_file:
-            csv_reader = csv.reader(csv_file, delimiter='\t')
-            for row in csv_reader:
-                codon_idx = 0
-                gene_name = row[0]
+        pairProb = []
+        with open(self.pairprobFn, 'r') as csvFn:
+            csvReader = csv.reader(csvFn, delimiter='\t')
+            for row in csvReader:
+                codonIdx = 0
+                geneName = row[0]
                 for prob in row[1].split(" "):
-                    pairprob.append([gene_name, codon_idx, float(prob)])
-                    codon_idx += 1
-        self.pairprob = pd.DataFrame(pairprob, columns= ["gene_name","codon_idx","pair_prob"])
+                    pairProb.append([geneName, codonIdx, float(prob)])
+                    codonIdx += 1
+        self.pairProb = pd.DataFrame(pairProb, columns= ["gene_name","codon_idx","pair_prob"])
 
-    def fastaIter(self, fasta_fn):
-        fh = open(fasta_fn)
+    def fastaIter(self, fastaFn):
+        fh = open(fastaFn)
         faiter = (x[1] for x in groupby(fh, lambda line: line[0] == ">"))
-        fasta_dict = {}
+        fastaDic = {}
         for header in faiter:
-            gene_name = header.__next__()[1:].strip()
+            geneName = header.__next__()[1:].strip()
             seq = "".join(s.strip() for s in faiter.__next__())
-            seq_list = [seq[i:i+3] for i in range(0, len(seq), 3)]
-            fasta_dict[gene_name] = seq_list
-        return fasta_dict
+            seqLst = [seq[i:i+3] for i in range(0, len(seq), 3)]
+            fastaDic[geneName] = seqLst
+        return fastaDic
 
     def getCodons(self):
         ## extract cds sequence from the ref genome, iterate the transcript sequence and yield codons
-        cds_bt = pbt.BedTool(self.prefix + '.sort.CDS.bed')
-        cds_bt.sequence(fi=self.fasta, fo= self.prefix + '.fasta', s=True, name=True,  split=True)
-        self.cds_bt_df = cds_bt.to_dataframe(names=['chrom', 'start', 'end', 'gene_name', 'score', 'strand',
-                                                    'thickStart', 'thickEnd', 'reserved', 'blockCount', 'blockSizes',
-                                                    'blockStarts'])
-        self.codons_dict = self.fastaIter(self.prefix + '.fasta') # parse a fasta file to a list of codons
+        cdsBt = pbt.BedTool(self.prefix + '.sort.CDS.bed')
+        cdsBt.sequence(fi=self.fasta, fo= self.prefix + '.fasta', s=True, name=True,  split=True)
+        self.cdsBtDf = cdsBt.to_dataframe(names=['chrom', 'start', 'end', 'gene_name', 'score', 'strand', 'thickStart',
+                                                 'thickEnd', 'reserved', 'blockCount', 'blockSizes', 'blockStarts'])
+        self.codonsDic = self.fastaIter(self.prefix + '.fasta') # parse a fasta file to a list of codons
 
     def createCodonTable(self):
         ## construct the gene level df from the bed12 file
         codons = []
-        pos_ranges_writer = open(self.prefix + ".pos_ranges.txt", "w")
-        pos_ranges_writer.write("#gene_name\tpos_ranges\n")
-        for gene_name in self.cds_bt_df.gene_name:
+        posRangesWriter = open(self.prefix + ".pos_ranges.txt", "w")
+        posRangesWriter.write("#gene_name\tpos_ranges\n")
+        for geneName in self.cdsBtDf.gene_name:
             ## get the info from df
-            curr = self.cds_bt_df.loc[self.cds_bt_df["gene_name"] == gene_name]
-            gene_start = curr["start"].values[0]
+            curr = self.cdsBtDf.loc[self.cdsBtDf["gene_name"] == geneName]
+            geneStart = curr["start"].values[0]
             chrom = curr["chrom"].values[0]
-            gene_strand = curr["strand"].values[0]
-            exon_starts = list(map(int, curr["blockStarts"].values[0].split(",")))
-            exon_sizes = list(map(int, curr["blockSizes"].values[0].split(",")))
+            geneStrand = curr["strand"].values[0]
+            exonStarts = list(map(int, curr["blockStarts"].values[0].split(",")))
+            exonSizes = list(map(int, curr["blockSizes"].values[0].split(",")))
 
             ## extract the cds nt index, the order of exons, and save to a nested list
-            pos_ranges = []
-            if gene_strand == "+":
+            posRanges = []
+            if geneStrand == "+":
                 phase, distance = 0, 0
-                for i in range(len(exon_starts)):
-                    pos_ranges.append((gene_start + exon_starts[i], gene_start + exon_starts[i] + exon_sizes[i], phase))
-                    distance += exon_sizes[i]
+                for i in range(len(exonStarts)):
+                    posRanges.append((geneStart + exonStarts[i], geneStart + exonStarts[i] + exonSizes[i], phase))
+                    distance += exonSizes[i]
                     phase = distance % 3
-            elif gene_strand == "-":
+            elif geneStrand == "-":
                 distance = 0
-                for i in range(len(exon_starts)):
-                    distance += exon_sizes[i]
+                for i in range(len(exonStarts)):
+                    distance += exonSizes[i]
                     phase = (3 - (distance % 3)) % 3
-                    pos_ranges.append((gene_start + exon_starts[i], gene_start + exon_starts[i] + exon_sizes[i], phase))
+                    posRanges.append((geneStart + exonStarts[i], geneStart + exonStarts[i] + exonSizes[i], phase))
 
             ## add 10 codons upstream of a gene 
-            upstream_counter = 10
-            while upstream_counter > 0:
-                if gene_strand == "+":
-                    pos_ranges_upstream = [(pos_ranges[0][0]-30, pos_ranges[0][0], 0)] + pos_ranges
-                    for start in range(pos_ranges[0][0]-30, pos_ranges[0][0], 3):
-                        codons.append([chrom, start, start+3, gene_name, -upstream_counter, gene_strand, "NA", 0])
-                        upstream_counter -= 1
+            upstreamCounter = 10
+            while upstreamCounter > 0:
+                if geneStrand == "+":
+                    posRangesUpstream = [(posRanges[0][0]-30, posRanges[0][0], 0)] + posRanges
+                    for start in range(posRanges[0][0]-30, posRanges[0][0], 3):
+                        codons.append([chrom, start, start+3, geneName, -upstreamCounter, geneStrand, "NA", 0])
+                        upstreamCounter -= 1
                 else:
-                    pos_ranges_upstream = pos_ranges + [(pos_ranges[0][1], pos_ranges[0][1]+30, 0)]
-                    for end in range(pos_ranges[-1][1]+30, pos_ranges[-1][1], -3):
-                        codons.append([chrom, end-3, end, gene_name, -upstream_counter, gene_strand, "NA", 0])
-                        upstream_counter -= 1
+                    posRangesUpstream = posRanges + [(posRanges[0][1], posRanges[0][1]+30, 0)]
+                    for end in range(posRanges[-1][1]+30, posRanges[-1][1], -3):
+                        codons.append([chrom, end-3, end, geneName, -upstreamCounter, geneStrand, "NA", 0])
+                        upstreamCounter -= 1
 
             ## create position ranges file for look ups
-            pos_ranges_str = "|".join([ str(i[0]) + "," + str(i[1]) + "," + str(i[2]) for i in pos_ranges_upstream])
-            pos_ranges_writer.write(gene_name + "\t" + pos_ranges_str + "\n")
+            posRangesStr = "|".join([ str(i[0]) + "," + str(i[1]) + "," + str(i[2]) for i in posRangesUpstream])
+            posRangesWriter.write(geneName + "\t" + posRangesStr + "\n")
 
             ## coding region of a gene
-            if gene_strand == "+":
-                starts = [start for pos_range in pos_ranges for start in range(pos_range[0], pos_range[1])]
-                for nt_idx in range(0, len(starts), 3):
-                    codon_idx = int(nt_idx/3)
-                    codon = self.codons_dict[gene_name][codon_idx]
-                    pos = starts[nt_idx]
-                    codons.append([chrom, pos, pos+3, gene_name, codon_idx, gene_strand, codon, 0])
+            if geneStrand == "+":
+                starts = [start for posRange in posRanges for start in range(posRange[0], posRange[1])]
+                for ntIdx in range(0, len(starts), 3):
+                    codonIdx = int(ntIdx/3)
+                    codon = self.codonsDic[geneName][codonIdx]
+                    pos = starts[ntIdx]
+                    codons.append([chrom, pos, pos+3, geneName, codonIdx, geneStrand, codon, 0])
             else:
-                ends = [end for pos_range in pos_ranges for end in range(pos_range[0], pos_range[1])][::-1] #  reverse
-                for nt_idx in range(0, len(ends), 3):
-                    codon_idx = int(nt_idx/3)
-                    codon = self.codons_dict[gene_name][codon_idx]
-                    pos = ends[nt_idx]
-                    codons.append([chrom, pos-3, pos, gene_name, codon_idx, gene_strand, codon, 0])
+                ends = [end+1 for posRange in posRanges for end in range(posRange[0], posRange[1])][::-1] # reverse
+                for ntIdx in range(0, len(ends), 3):
+                    codonIdx = int(ntIdx/3)
+                    codon = self.codonsDic[geneName][codonIdx]
+                    pos = ends[ntIdx]
+                    codons.append([chrom, pos-3, pos, geneName, codonIdx, geneStrand, codon, 0])
 
         ## convert nested list to df
-        self.codons_df = pd.DataFrame(codons, columns=["chrom", "asite_start", "asite_end", "gene_name", "codon_idx",
-                                                       "gene_strand", "codon", "reading_frame"])
+        self.codonsDf = pd.DataFrame(codons, columns=["chrom", "asite_start", "asite_end", "gene_name", "codon_idx",
+                                                      "gene_strand", "codon", "reading_frame"])
 
     def mergeDf(self):
         ## import the salmon df, rna secondary structure, and merge with cds df
-        tpm_df = pd.read_table(self.tpm,  header=0)
-        codons_tpm = pd.merge(self.codons_df, tpm_df, how = "inner", left_on = ["gene_name"], right_on="Name")
-        codons_tpm_pairprob = pd.merge(codons_tpm, self.pairprob, how = "inner", on = ["gene_name", "codon_idx"])
-        codons_tpm_pairprob_out = codons_tpm_pairprob[["chrom", "asite_start", "asite_end", "gene_name", "codon_idx",
-                                                       "gene_strand", "codon", "TPM", "pair_prob"]]
-        codons_tpm_pairprob_out.to_csv(path_or_buf=self.prefix + '.cds_codons.bed', sep='\t', header=True, index=False)
+        tpm = pd.read_table(self.tpm,  header=0)
+        codonsTpm = pd.merge(self.codonsDf, tpm, how = "inner", left_on = ["gene_name"], right_on="Name")
+        codonsTpmPairprob = pd.merge(codonsTpm, self.pairProb, how = "left", on = ["gene_name", "codon_idx"]).fillna('NA')
+        codonsTpmPairprobOut = codonsTpmPairprob[["chrom", "asite_start", "asite_end", "gene_name", "codon_idx",
+                                                  "gene_strand", "codon", "TPM", "pair_prob"]]
+        codonsTpmPairprobOut.to_csv(path_or_buf=self.prefix + '.cds_codons.bed', sep='\t', header=True, index=False)
 
 ## the main process
 if __name__ == '__main__':
