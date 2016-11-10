@@ -3,12 +3,12 @@
 ## ----------------------------------------
 ## scikit-ribo
 ## ----------------------------------------
-## a module for visualization
+## a module for visualization riboseq data
 ## ----------------------------------------
 ## author: Han Fang
 ## contact: hanfang.cshl@gmail.com
 ## website: hanfang.github.io
-## date: 1/28/2016
+## date: 10/28/2016
 ## ----------------------------------------
 
 from __future__ import print_function, division
@@ -38,7 +38,7 @@ class figures(object):
             return
         ## read the df and construct numpy array
         # geneName = self.geneName
-        riboCnt = np.array(self.riboDf[self.riboDf["gene_name"] == geneName]["ribosome_count"])[30:]
+        riboCnt = np.array(self.riboDf[self.riboDf["gene_name"] == geneName]["ribosome_count"])[30:] # rm [30:]
         pairProb = np.array(self.riboDf[self.riboDf["gene_name"] == geneName]["pair_prob"])
 
         ## reverse the array if the strand is -
@@ -54,16 +54,14 @@ class figures(object):
         slidingWindowAvg = np.convolve(pairProb, window,mode="valid")
 
         ## plot the ribosome count along a transcript
-        # plt.figure()
         f, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
-        #ax1 = plt.subplot(2, 1, 1)
         f.suptitle(geneName)
         ax1.plot(riboCnt, sns.xkcd_rgb["denim blue"], lw = 2)
         #print( [item.get_text() for item in ax1.get_xticklabels()])
         #labels = range(-30, riboCnt.size+1)
         # [int(float(item.get_text()))-30 for item in ax1.get_xticklabels()]
         #ax1.set_xticklabels(labels)
-        ax1.axvline(30, color="#999999",dashes=[3,2],zorder=-1)
+        ax1.axvline(0, color="#999999",dashes=[3,2],zorder=-1) # change to 30
         ax1.axvline(riboCnt.size ,color="#999999",dashes=[3,2],zorder=-1)
         ax1.set_ylabel("Ribosome counts")
         ax2 = plt.subplot(2, 1, 2)
@@ -73,7 +71,7 @@ class figures(object):
         ax2.set_ylim([0,1])
         ax2.set_ylabel("Pairing probability")
         ax2.set_xlabel("Position in transcript (5' -> 3')")
-        ax2.axvline(30, color="#999999",dashes=[3,2],zorder=-1)
+        ax2.axvline(0, color="#999999",dashes=[3,2],zorder=-1) # change to 30
         ax2.axvline(riboCnt.size ,color="#999999",dashes=[3,2],zorder=-1)
         ax2.legend()
         plt.gcf()
@@ -86,45 +84,7 @@ class figures(object):
         ## loop over all genes and plot
         for geneName in set(self.riboDf["gene_name"]):
             self.plotCoverageOnGene(geneName)
-        '''
-            riboCnt = np.array(self.riboDf[self.riboDf["gene_name"] == geneName]["ribosome_count"])
-            pairProb = np.array(self.riboDf[self.riboDf["gene_name"] == geneName]["pair_prob"])
-
-            ## reverse the array if the strand is -
-            if self.ribo_df.loc[self.ribo_df["gene_name"] == gene_name]["gene_strand"].values[0] == "-":
-                ribo_array = ribo_array[::-1]
-                pair_prob_array = pair_prob_array[::-1]
-
-            ## save the ribosome count array to a txt file
-            np.savetxt( "./riboCounts/" + str(gene_name) + ".txt", ribo_array, fmt='%i', delimiter=' ', newline=' ')
-
-            ## sliding window average of the pair probability
-            window = np.ones(5).astype(float)/5.0
-            sliding_window_avg = np.convolve(pair_prob_array,window,mode="valid")
-
-            ## plot the ribosome count along a transcript
-            plt.clf()
-            plt.figure()
-            plt.subplot(2, 1, 1)
-            plt.title( gene_name )
-            plt.plot( ribo_array, sns.xkcd_rgb["denim blue"], lw = 2)
-            plt.axvline(0, color="#999999",dashes=[3,2],zorder=-1)
-            plt.axvline(ribo_array.size ,color="#999999",dashes=[3,2],zorder=-1)
-            plt.ylabel("Ribosome counts")
-            plt.subplot(2, 1, 2)
-            plt.plot( pair_prob_array, sns.xkcd_rgb["medium green"], label="Per codon pairing probability")
-            plt.plot( sliding_window_avg, sns.xkcd_rgb["amber"], label="5 codon average probability")
-            plt.ylim([0,1])
-            plt.ylabel("Pairing probability")
-            plt.xlabel("Position in transcript (5' to 3')")
-            plt.axvline(0, color="#999999",dashes=[3,2],zorder=-1)
-            plt.axvline(ribo_array.size ,color="#999999",dashes=[3,2],zorder=-1)
-            plt.legend()
-            plt.gcf()
-            plt.savefig( "./coverage_figures/" + gene_name + "_ribosome_count.pdf")
-            plt.clf()
-            plt.close()
-        '''
+        print("[status]\tFinished plotting all genes.", flush=True)
 
 
 ## ----------------------------------------
