@@ -24,61 +24,79 @@ import pybedtools as pbt
 import argparse
 
 
-class Figures:
+class figures(object):
     ''' define a class for plotting figures
     '''
-    def __init__(self, df_fn, name):
-        self.df_fn = df_fn
-        self.gene_name = name
-        self.ribo_df = pd.read_table(self.df_fn,  header=0)
+    def __init__(self, fn):#, name):
+        #self.geneName = name
+        self.riboDf = pd.read_table(fn,  header=0)
 
-    def plot_coverage_on_transcript(self):
+    def plotCoverageOnGene(self, geneName):
+        ## confirm the gene exist
+        if geneName not in set(self.riboDf["gene_name"]):
+            print("[error]\tthe database does not have gene: ", str(geneName), flush=True)
+            return
         ## read the df and construct numpy array
-        gene_name = self.gene_name
-        ribo_array = np.array(self.ribo_df[self.ribo_df["gene_name"] == gene_name]["ribosome_count"])
-        pair_prob_array = np.array(self.ribo_df[self.ribo_df["gene_name"] == gene_name]["pair_prob"])
-        
+        # geneName = self.geneName
+        riboCnt = np.array(self.riboDf[self.riboDf["gene_name"] == geneName]["ribosome_count"])[30:]
+        pairProb = np.array(self.riboDf[self.riboDf["gene_name"] == geneName]["pair_prob"])
+
         ## reverse the array if the strand is -
-        if self.ribo_df.loc[self.ribo_df["gene_name"] == gene_name]["gene_strand"].values[0] == "-":
-            ribo_array = ribo_array[::-1]
-            pair_prob_array = pair_prob_array[::-1]
+        if self.riboDf.loc[self.riboDf["gene_name"] == geneName]["gene_strand"].values[0] == "-":
+            riboCnt = riboCnt[::-1]
+            pairProb = pairProb[::-1]
+
+        ## save the ribosome count array to a txt file
+        np.savetxt("./riboCounts/" + str(geneName) + ".txt", riboCnt, fmt='%i', delimiter=' ', newline=' ')
 
         ## sliding window average of the pair probability
         window = np.ones(5).astype(float)/5.0
-        sliding_window_avg = np.convolve(pair_prob_array,window,mode="valid")
+        slidingWindowAvg = np.convolve(pairProb, window,mode="valid")
 
         ## plot the ribosome count along a transcript
-        plt.figure()
-        plt.subplot(2, 1, 1)
-        plt.title( gene_name )
-        plt.plot( ribo_array, sns.xkcd_rgb["denim blue"], lw = 2)
-        plt.axvline(0, color="#999999",dashes=[3,2],zorder=-1)
-        plt.axvline(ribo_array.size ,color="#999999",dashes=[3,2],zorder=-1)
-        plt.ylabel("Ribosome counts")
-        plt.subplot(2, 1, 2)
-        plt.plot( pair_prob_array, sns.xkcd_rgb["medium green"], label="Per codon pairing probability")
-        plt.plot( sliding_window_avg, sns.xkcd_rgb["amber"], label="5 codon average probability")
-        plt.ylim([0,1])
-        plt.ylabel("Pairing probability")
-        plt.xlabel("Position in transcript (5' to 3')")
-        plt.axvline(0, color="#999999",dashes=[3,2],zorder=-1)
-        plt.axvline(ribo_array.size ,color="#999999",dashes=[3,2],zorder=-1)
-        plt.legend()
+        # plt.figure()
+        f, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
+        #ax1 = plt.subplot(2, 1, 1)
+        f.suptitle(geneName)
+        ax1.plot(riboCnt, sns.xkcd_rgb["denim blue"], lw = 2)
+        #print( [item.get_text() for item in ax1.get_xticklabels()])
+        #labels = range(-30, riboCnt.size+1)
+        # [int(float(item.get_text()))-30 for item in ax1.get_xticklabels()]
+        #ax1.set_xticklabels(labels)
+        ax1.axvline(30, color="#999999",dashes=[3,2],zorder=-1)
+        ax1.axvline(riboCnt.size ,color="#999999",dashes=[3,2],zorder=-1)
+        ax1.set_ylabel("Ribosome counts")
+        ax2 = plt.subplot(2, 1, 2)
+        ax2.plot(pairProb, sns.xkcd_rgb["medium green"], label="Per codon pairing probability")
+        ax2.plot(slidingWindowAvg, sns.xkcd_rgb["amber"], label="5 codon average probability")
+        #ax2.set_xticklabels(labels)
+        ax2.set_ylim([0,1])
+        ax2.set_ylabel("Pairing probability")
+        ax2.set_xlabel("Position in transcript (5' -> 3')")
+        ax2.axvline(30, color="#999999",dashes=[3,2],zorder=-1)
+        ax2.axvline(riboCnt.size ,color="#999999",dashes=[3,2],zorder=-1)
+        ax2.legend()
         plt.gcf()
-        plt.savefig( gene_name + "_ribosome_count.pdf")
+        plt.savefig( "./coveragesPlots/" + str(geneName) + ".riboCount.pdf")
         plt.clf()
-        plt.close()
+        plt.cla()
+        plt.close(f)
 
-    def plot_all_genes(self):        
+    def plotAllGenes(self):
         ## loop over all genes and plot
-        for gene_name in set(self.ribo_df["gene_name"]):
-            ribo_array = np.array(self.ribo_df[self.ribo_df["gene_name"] == gene_name]["ribosome_count"])
-            pair_prob_array = np.array(self.ribo_df[self.ribo_df["gene_name"] == gene_name]["pair_prob"])
+        for geneName in set(self.riboDf["gene_name"]):
+            self.plotCoverageOnGene(geneName)
+        '''
+            riboCnt = np.array(self.riboDf[self.riboDf["gene_name"] == geneName]["ribosome_count"])
+            pairProb = np.array(self.riboDf[self.riboDf["gene_name"] == geneName]["pair_prob"])
 
             ## reverse the array if the strand is -
             if self.ribo_df.loc[self.ribo_df["gene_name"] == gene_name]["gene_strand"].values[0] == "-":
                 ribo_array = ribo_array[::-1]
                 pair_prob_array = pair_prob_array[::-1]
+
+            ## save the ribosome count array to a txt file
+            np.savetxt( "./riboCounts/" + str(gene_name) + ".txt", ribo_array, fmt='%i', delimiter=' ', newline=' ')
 
             ## sliding window average of the pair probability
             window = np.ones(5).astype(float)/5.0
@@ -106,6 +124,8 @@ class Figures:
             plt.savefig( "./coverage_figures/" + gene_name + "_ribosome_count.pdf")
             plt.clf()
             plt.close()
+        '''
+
 
 ## ----------------------------------------
 ## the main work
@@ -113,7 +133,7 @@ class Figures:
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", help="input data frame, required")
-    parser.add_argument("-g", help="gene name of interest, alternatively type [all_genes], will automatically plot all genes, required")
+    parser.add_argument("-g", help="gene of interest, or type [all] - automatically plot all genes, required")
 
     ## check if there is any argument
     if len(sys.argv) <= 1:
@@ -127,17 +147,18 @@ if __name__ == '__main__':
         print("[status]\tprocessing the input file: " + args.i, flush=True)
         df_fn = args.i
         gene_name = args.g
-        if gene_name != "all_genes":
-            print("[execute]\tplotting ribosome coverage along transcript" + str(gene_name), flush=True)
-            figures_hdl = Figures(df_fn, gene_name)
-            figures_hdl.plot_coverage_on_transcript()
+        # create folders
+        cmd = "mkdir -p coveragesPlots; mkdir -p riboCounts "
+        os.system(cmd)
+        # all genes or one gene
+        if gene_name != "all":
+            print("[execute]\tplotting ribosome coverage along gene: " + str(gene_name), flush=True)
+            fig = figures(df_fn)
+            fig.plotCoverageOnGene(gene_name)
         else:
-            print("[execute]\tplotting ribosome coverage along every transcript", flush=True)
-            cmd = "mkdir -p coverage_figures"
-            os.system( cmd )
-            figures_hdl = Figures(df_fn, gene_name)
-            figures_hdl.plot_all_genes()
-
+            print("[execute]\tplotting ribosome coverage along each gene", flush=True)
+            fig = figures(df_fn)
+            fig.plotAllGenes()
         ## end
         print("[status]\tPlotting module finished.", flush=True)
 
