@@ -116,14 +116,24 @@ class processAln(object):
 
         ## retrieve the read length and seq information from the bam file
         trainingDf = pd.merge(trainingDf, self.readsDf, on='name')
+        ### ??
         trainingDf['asite'] = np.where(trainingDf['gene_strand'] == '+',
                                        trainingDf['sc_start'] - trainingDf['start'] + 3,
                                        trainingDf['end'] - trainingDf['sc_end'] + 3 )
-        trainingDf['three_distance'] = np.where(trainingDf['gene_strand'] == '+',
-                                                trainingDf['sc_start'] - trainingDf['end'] + 3,
-                                                trainingDf['start'] - trainingDf['sc_end'] + 3 )
-        trainingDf['five_offset'] = trainingDf['asite']  % 3 ## +1 ?
-        trainingDf['three_offset'] = trainingDf['three_distance'] % 3
+        #trainingDf['three_distance'] = np.where(trainingDf['gene_strand'] == '+',
+        #                                        trainingDf['sc_start'] - trainingDf['end'] + 3,
+        #                                        trainingDf['start'] - trainingDf['sc_end'] + 3 )
+        #trainingDf['five_offset'] = (-1 * trainingDf['asite']) % 3
+        #trainingDf['three_offset'] =(-1 * trainingDf['three_distance']) % 3
+        ## alternative phasing
+        #'''
+        trainingDf['five_offset'] = trainingDf.apply(lambda x: self.getDistance(x['gene_name'], x['start'], x['end'],
+                                                                              x['gene_strand'], self.posDic, "five"),
+                                                     axis=1)
+        trainingDf['three_offset'] = trainingDf.apply(lambda x: self.getDistance(x['gene_name'], x['start'], x['end'],
+                                                                              x['gene_strand'], self.posDic, "three"),
+                                                     axis=1)
+        #'''
         ## filter a read by whether it has a-site that satisfies [12,18]
         trainingDf = trainingDf[((trainingDf['asite'] >= 12) & (trainingDf['asite'] <= 18))]
         ## slice the dataframe to the variables needed for training data
