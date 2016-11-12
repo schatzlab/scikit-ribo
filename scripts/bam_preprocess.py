@@ -153,10 +153,10 @@ class processAln(object):
                                                     'gene_blockSizes':'object','gene_blockStarts':'object'})
         ## compute offset
         testingDf['five_offset'] = testingDf.apply(lambda x: self.getDistance(x['gene_name'], x['start'], x['end'],
-                                                                              x['gene_strand'], self.posDic, "five"),
+                                                                              x['gene_strand'], self.posDic, 5),
                                                      axis=1)
         testingDf['three_offset'] = testingDf.apply(lambda x: self.getDistance(x['gene_name'], x['start'], x['end'],
-                                                                               x['gene_strand'], self.posDic, "three"),
+                                                                               x['gene_strand'], self.posDic, 3),
                                                       axis=1)
         testingDf = testingDf[(testingDf['five_offset'] != -1) & (testingDf['three_offset'] != -1)]
         testingDf = pd.merge(testingDf, self.readsDf, on='name', how = 'inner')
@@ -170,13 +170,13 @@ class processAln(object):
         pos_ranges = dic[gene_name]
         if gene_strand == "-": pos_ranges = pos_ranges[::-1]
         num_regions = len(pos_ranges)
-        if mode == "five":
+        if mode == 5:
             if gene_strand == "+":
                 pos = start + 15
             else:
                 pos = end - 15
             return self.offsetHelper(num_regions, pos_ranges, gene_strand, pos)
-        elif mode == "three":
+        elif mode == 3:
             if gene_strand == "+":
                 pos = end - 12
             else:
