@@ -27,9 +27,10 @@ import argparse
 class figures(object):
     ''' define a class for plotting figures
     '''
-    def __init__(self, fn):#, name):
+    def __init__(self, fn, output):
         #self.geneName = name
         self.riboDf = pd.read_table(fn,  header=0)
+        self.output = output
 
     def plotCoverageOnGene(self, geneName):
         ## confirm the gene exist
@@ -38,7 +39,7 @@ class figures(object):
             return
         ## read the df and construct numpy array
         # geneName = self.geneName
-        riboCnt = np.array(self.riboDf[self.riboDf["gene_name"] == geneName]["ribosome_count"])[30:] # rm [30:]
+        riboCnt = np.array(self.riboDf[self.riboDf["gene_name"] == geneName]["ribosome_count"]) # rm [30:]
         pairProb = np.array(self.riboDf[self.riboDf["gene_name"] == geneName]["pair_prob"])
 
         ## reverse the array if the strand is -
@@ -46,8 +47,9 @@ class figures(object):
             riboCnt = riboCnt[::-1]
             pairProb = pairProb[::-1]
 
+        riboCnt = riboCnt[10:]
         ## save the ribosome count array to a txt file
-        np.savetxt("./riboCounts/" + str(geneName) + ".txt", riboCnt, fmt='%i', delimiter=' ', newline=' ')
+        np.savetxt(self.output + "/riboCounts/" + str(geneName) + ".txt", riboCnt, fmt='%i', delimiter=' ', newline=' ')
 
         ## sliding window average of the pair probability
         window = np.ones(5).astype(float)/5.0
@@ -75,7 +77,7 @@ class figures(object):
         ax2.axvline(riboCnt.size ,color="#999999",dashes=[3,2],zorder=-1)
         ax2.legend()
         plt.gcf()
-        plt.savefig( "./coveragesPlots/" + str(geneName) + ".riboCount.pdf")
+        plt.savefig(self.output + "/plots/" + str(geneName) + ".riboCount.pdf")
         plt.clf()
         plt.cla()
         plt.close(f)
@@ -94,6 +96,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", help="input data frame, required")
     parser.add_argument("-g", help="gene of interest, or type [all] - automatically plot all genes, required")
+    parser.add_argument("-o", help="output path, required")
 
     ## check if there is any argument
     if len(sys.argv) <= 1:
@@ -103,21 +106,21 @@ if __name__ == '__main__':
         args = parser.parse_args()
 
     ## process the file if the input files exist
-    if (args.i != None and args.g != None):
+    if (args.i != None and args.g != None and args.o != None):
         print("[status]\tprocessing the input file: " + args.i, flush=True)
         df_fn = args.i
         gene_name = args.g
+        output = args.o
         # create folders
-        cmd = "mkdir -p coveragesPlots; mkdir -p riboCounts "
+        cmd = "mkdir -p " + output + "/plots; mkdir -p " + output + "/riboCounts "
         os.system(cmd)
         # all genes or one gene
+        fig = figures(df_fn, output)
         if gene_name != "all":
-            print("[execute]\tplotting ribosome coverage along gene: " + str(gene_name), flush=True)
-            fig = figures(df_fn)
+            print("[execute]\tplotting ribosome coverage for gene: " + str(gene_name), flush=True)
             fig.plotCoverageOnGene(gene_name)
         else:
-            print("[execute]\tplotting ribosome coverage along each gene", flush=True)
-            fig = figures(df_fn)
+            print("[execute]\tplotting ribosome coverage for each gene", flush=True)
             fig.plotAllGenes()
         ## end
         print("[status]\tPlotting module finished.", flush=True)
