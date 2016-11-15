@@ -203,7 +203,7 @@ if __name__ == '__main__':
     parser.add_argument("-i", help="input bam file")
     parser.add_argument("-p", help="prefix for BED/index files")
     parser.add_argument("-q", help="minimum mapq allowed, Default: 20", default=20, type=int)
-    parser.add_argument("-l", help="shortest read length allowed, Default: 25", default=25, type=int)
+    parser.add_argument("-l", help="shortest read length allowed, Default: 25", default=20, type=int)
     parser.add_argument("-u", help="longest read length allowed, Default: 35", default=35, type=int)
     parser.add_argument("-o", help="output filtered bam file")
 

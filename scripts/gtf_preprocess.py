@@ -27,14 +27,14 @@ from itertools import groupby
 class gtf2Bed(object):
     ''' class to sort and get start codon from a gtf file
     '''
-    def __init__(self, gtf, fasta, pairprobFn, tpm):
+    def __init__(self, gtf, fasta, pairprobFn, tpm, output):
         self.gtf = gtf
         self.fasta = fasta
         self.pairprobFn = pairprobFn
         self.tpm = tpm
         self.bedtool = pbt.BedTool(self.gtf)
         self.base = os.path.basename(self.gtf)
-        self.prefix = os.path.splitext(self.base)[0]
+        self.prefix = output + "/" + os.path.splitext(self.base)[0]
         self.geneBed12s = []
 
     def convertGtf(self):
@@ -195,6 +195,7 @@ if __name__ == '__main__':
     parser.add_argument("-r", help="fasta file, required")
     parser.add_argument("-s", help="arrays of RNA secondary structure pairing probabilities, required")
     parser.add_argument("-t", help="pre-computed tpm salmon data-frame from RNA-seq data, required")
+    parser.add_argument("-o", help="output path, required")
 
     ## check if there is any argument
     if len(sys.argv) <= 1: 
@@ -204,15 +205,20 @@ if __name__ == '__main__':
         args = parser.parse_args()
     
     ## process the file if the input files exist
-    if (args.g!=None) & (args.r!=None) & (args.s!=None) & (args.t!=None):
+    if (args.g!=None) & (args.r!=None) & (args.s!=None) & (args.t!=None) & (args.o!=None):
         print ("[status]\tReading the input file: " + args.g, flush=True)
         input_gtf = args.g
         input_ref = args.r
         input_pairprob = args.s
         input_tpm = args.t
+        output = args.o
+        # create output folder
+        cmd = 'mkdir -p ' + output
+        os.system(cmd)
+
         ## execute
         print("[execute]\tStarting the pre-processing module", flush=True)
-        gtf_hdl = gtf2Bed(input_gtf, input_ref, input_pairprob, input_tpm)
+        gtf_hdl = gtf2Bed(input_gtf, input_ref, input_pairprob, input_tpm, output)
         print("[execute]\tConverting the the gtf file in to sql db", flush=True)
         gtf_hdl.convertGtf()
         print("[execute]\tExtracting the start codon from the gtf db", flush=True)
