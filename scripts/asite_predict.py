@@ -39,7 +39,7 @@ class visualizeAsite(object):
     '''
     def __init__(self, asiteFn):
         self.asiteFn = asiteFn
-        self.asiteDf = pd.read_table(self.asiteFn,  header=0)
+        self.asiteDf = pd.read_table(self.asiteFn,  header=0).dropna()
 
     def plot(self):
         sns.set(font_scale=2)
@@ -66,7 +66,7 @@ class visualizeAsite(object):
 class trainModel(object):
     ''' define a class for model training - a-site prediction
     '''
-    def __init__(self, object, testingFn, cdsIdxFn):
+    def __init__(self, object, testingFn, cdsIdxFn, classifier):
         self.traningDf = object.asiteDf
         self.asiteFn = object.asiteFn
         self.colNames = list(self.traningDf.columns.values)
@@ -74,11 +74,11 @@ class trainModel(object):
         self.X = np.array(pd.get_dummies(self.traningDf[self.colNames]) )
         self.y = np.array(self.traningDf["asite"])
         self.testingFn = testingFn
-        self.testingDf = pd.read_table(self.testingFn, header=0)
+        self.testingDf = pd.read_table(self.testingFn, header=0).dropna()
         self.cdsIdxFn = cdsIdxFn
         self.cdsIdxDf = pd.read_table(self.cdsIdxFn, header=0)
         self.featureNames =(pd.get_dummies(self.traningDf[self.colNames]).columns.values)
-
+        self.classifier = classifier
 
     def rfFit(self):
         ## feature selection
@@ -119,7 +119,7 @@ class trainModel(object):
         plt.ylim([0, 1])
         #plt.gca().tight_layout()
         plt.gcf()
-        plt.savefig( self.asiteFn + ".feature_importances.pdf", facecolor="white")
+        plt.savefig(self.asiteFn + ".feature_importances.pdf", facecolor="white")
 
     def rfPredict(self):
         ## create df for testing data
@@ -134,7 +134,8 @@ class trainModel(object):
         testingDf["asite"] = self.reducedClf.predict(sltTestingX)
         self.testingDfOut = testingDf[["chrom", "start", "end", "name", "strand", "asite", "read_length", "five_offset",
                                        "three_offset", "gene_start", "gene_end", "gene_name", "gene_strand"]]
-        self.testingDfOut.to_csv(path_or_buf=self.testingFn + '.predicted.txt', sep='\t', header=True, index=False)
+        self.testingDfOut.to_csv(path_or_buf=self.testingFn + '.predicted.txt',
+                                 sep='\t', header=True, index=False)
 
     def svmFit(self):
         ## grid search
@@ -152,11 +153,15 @@ class trainModel(object):
         ''' define a class for plotting multi-class roc curve
         '''
         # shuffle and split training and test sets
-        self.OvrClf = OneVsRestClassifier(self.clf)
+        clf = self.reducedClf if self.classifier == "rf" else self.clf
+        self.OvrClf = OneVsRestClassifier(clf)
         self.y = label_binarize(self.y, classes=[12,13,14,15,16,17,18])
         nClasses = self.y.shape[1]
         X_train, X_test, y_train, y_test = train_test_split(self.X, self.y, test_size=.5, random_state=0)
-        y_score = self.OvrClf.fit(X_train, y_train).decision_function(X_test)
+        if self.classifier == "rf":
+            y_score = self.OvrClf.fit(X_train, y_train).predict_proba(X_test)
+        else:
+            y_score = self.OvrClf.fit(X_train, y_train).decision_function(X_test)
         # Compute ROC curve and ROC area for each class
         fpr = dict()
         tpr = dict()
@@ -185,7 +190,7 @@ class trainModel(object):
         plt.tick_params(axis='both', which='major', labelsize=18)
         plt.legend(loc="lower right",fontsize=12)
         plt.gcf()
-        plt.savefig( self.asiteFn + ".roc.pdf")
+        plt.savefig(self.asiteFn + ".roc.pdf")
 
     def recoverAsite(self):
         ## [temp] import the predicted a-site location df
@@ -212,6 +217,7 @@ class trainModel(object):
                                     on = ["chrom", "asite_start", "asite_end"])
         self.riboCountDf["ribosome_count"].fillna(value=0, inplace=True)
         self.riboCountDf["ribosome_count"] = self.riboCountDf["ribosome_count"].astype(int)
+        self.riboCountDf = self.riboCountDf.sort_values(by=["chrom", "asite_start", "asite_end"])
         self.riboCountDf.to_csv(path_or_buf=self.testingFn + '.ribocount.txt', sep='\t', header=True, index=False)
 
 
@@ -225,6 +231,7 @@ if __name__ == '__main__':
     parser.add_argument("-d", help="input index data-frame for the entire CDS region, required")
     parser.add_argument("-c", help="classifier to use, random forest (rf) or "
                                    "\support vector machine (svm), optional, default: rf", default="rf")
+    parser.add_argument("-o", help="output path, required")
 
     ## check if there is any argument
     if len(sys.argv) <= 1:
@@ -240,19 +247,25 @@ if __name__ == '__main__':
         cds_fn = args.t
         cds_idx = args.d
         classifier = args.c
+        output = args.o
+
+        cmd = "mkdir -p " + output
+        os.system(cmd)
 
         print("[execute]\tplotting the a-site location distribution from " + str(asite_fn), flush=True)
         asite_loc = visualizeAsite(asite_fn)
         asite_loc.plot()
 
         print("[execute]\tstart the process of a-site prediction", flush=True)
-        model = trainModel(asite_loc, cds_fn, cds_idx)
+        model = trainModel(asite_loc, cds_fn, cds_idx, classifier)
 
         if classifier == "rf":
             print("[execute]\tperform model training and cross validation on the training data", flush=True)
             model.rfFit()
             print("[execute]\tplotting the bar plot of the feature importance", flush=True)
             model.rfImportance()
+            print("[execute]\tplot roc curve based on cross validation", flush=True)
+            model.rocCurve()
             print("[execute]\tpredicting the a-site from the testing data", flush=True)
             model.rfPredict()
             print("[execute]\tlocalize the a-site codon and create coverage df/vectors", flush=True)
