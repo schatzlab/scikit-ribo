@@ -8,11 +8,11 @@ setup(
     author='Han Fang',
     author_email='hanfang.cshl@gmail.com',
     packages=['scikit-ribo', 'scikit-ribo.test'],
-    scripts=['script/bam_preprocess.py','script/gtf_preprocess.py'],
+    scripts=['script/bam_preprocess.py','script/gtf_preprocess.py','asite_predict.py','TE_modelling.py','plotting.py'],
     url='http://pypi.python.org/pypi/scikit-ribo/',
     license='LICENSE.txt',
     description='A scikit framework for joint analysis of Riboseq and RNAseq data.',
-    long_description=open('docs/README.txt').read(),
+    long_description=open('docs/README.md').read(),
     install_requires=[
     ],
 )
