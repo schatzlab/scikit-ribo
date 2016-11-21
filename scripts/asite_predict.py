@@ -24,12 +24,11 @@ import seaborn as sns
 import numpy as np
 import pybedtools as pbt
 import argparse
-from sklearn import cross_validation, preprocessing, svm, tree
+from sklearn import preprocessing, svm, tree
 from sklearn.metrics import roc_curve, auc
-# from sklearn.cross_validation import train_test_split
 from sklearn.preprocessing import label_binarize
 from sklearn.multiclass import OneVsRestClassifier
-from sklearn.model_selection import GridSearchCV, train_test_split
+from sklearn.model_selection import GridSearchCV, train_test_split, cross_val_score
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_selection import SelectFromModel, RFECV
 
@@ -39,7 +38,7 @@ class visualizeAsite(object):
     '''
     def __init__(self, asiteFn):
         self.asiteFn = asiteFn
-        self.asiteDf = pd.read_table(self.asiteFn,  header=0).dropna()
+        self.asiteDf = pd.read_table(self.asiteFn,  header=0)
 
     def plot(self):
         sns.set(font_scale=2)
@@ -74,7 +73,7 @@ class trainModel(object):
         self.X = np.array(pd.get_dummies(self.traningDf[self.colNames]) )
         self.y = np.array(self.traningDf["asite"])
         self.testingFn = testingFn
-        self.testingDf = pd.read_table(self.testingFn, header=0).dropna()
+        self.testingDf = pd.read_table(self.testingFn, header=0) # .dropna()
         self.cdsIdxFn = cdsIdxFn
         self.cdsIdxDf = pd.read_table(self.cdsIdxFn, header=0)
         self.featureNames =(pd.get_dummies(self.traningDf[self.colNames]).columns.values)
@@ -90,30 +89,29 @@ class trainModel(object):
         self.sltX = self.selector.transform(self.X)
         print("[status]\tOptimal number of features : %d" % self.selector.n_features_)
         ## prev: feature selection based on thresholding
-        #self.selector = SelectFromModel(self.clf, prefit=True, threshold=0.05)
-        #self.sltX = self.selector.transform(self.X)
-        #n_selected_features = self.sltX.shape[1]
-        #print("[status]\tNumber of selected features:\t"+ str(n_selected_features), flush=True)
+        # self.selector = SelectFromModel(self.clf, prefit=True, threshold=0.03)
+        # self.sltX = self.selector.transform(self.X)
+        # n_selected_features = self.sltX.shape[1]
+        # print("[status]\tNumber of selected features:\t"+ str(n_selected_features), flush=True)
 
         ## define a new classifier for reduced features
         self.reducedClf = RandomForestClassifier(max_features=None, n_jobs=-1)
         self.reducedClf = self.reducedClf.fit(self.sltX, self.y)
 
         ## cross validation
-        scores = cross_validation.cross_val_score(self.reducedClf, self.sltX, self.y, cv=10)
+        scores = cross_val_score(self.reducedClf, self.sltX, self.y, cv=10)
         print("[status]\tAccuracy: %0.3f (+/- %0.3f)" % (scores.mean(), scores.std() * 2), flush=True)
 
     def rfImportance(self):
         ## compute the std and index for the feature importance
         std = np.std([tree.feature_importances_ for tree in self.clf.estimators_],    axis=0)
-        indices = np.argsort(self.importances)[::-1]
-        importantFeatures = self.featureNames[indices]
+        idx = np.argsort(self.importances)[::-1]
+        importantFeatures = self.featureNames[idx]
 
         ## Plot the feature importances of the classifier
         plt.figure()
         plt.title("Feature importances")
-        plt.bar(range(self.X.shape[1]), self.importances[indices], color=sns.xkcd_rgb["denim blue"], yerr=std[indices],
-                align="center")
+        plt.bar(range(self.X.shape[1]), self.importances[idx], color=sns.xkcd_rgb["denim blue"], yerr=std[idx], align="center")
         plt.xticks(range(self.X.shape[1]), importantFeatures, rotation='vertical')
         plt.xlim([-1, 10])
         plt.ylim([0, 1])
@@ -123,19 +121,18 @@ class trainModel(object):
 
     def rfPredict(self):
         ## create df for testing data
-        testingDf = pd.read_table(self.testingFn,  header=0)
-        colNames = list(testingDf.columns.values)
-        namesToExclude = set(["gene_start", "gene_end", "gene_name", "chrom", "start", "end", "name", "mapq", "strand"])
-        remainColNames = [x for x in colNames if x not in namesToExclude]
-        testingX = np.array(pd.get_dummies(testingDf[remainColNames]) )
-
+        self.testingDf = pd.read_table(self.testingFn,  header=0)
+        #colNames = list(testingDf.columns.values)
+        #namesToExclude = set(["gene_start", "gene_end", "gene_name", "chrom", "start", "end", "name", "mapq", "strand"])
+        #remainColNames = [x for x in colNames if x not in namesToExclude]
+        #testingX = np.array(pd.get_dummies(testingDf[remainColNames]) )
+        testingX = np.array(pd.get_dummies(self.testingDf[self.colNames]) )
         ## selected a subset of features and predict a-site
         sltTestingX = self.selector.transform(testingX)
-        testingDf["asite"] = self.reducedClf.predict(sltTestingX)
-        self.testingDfOut = testingDf[["chrom", "start", "end", "name", "strand", "asite", "read_length", "five_offset",
-                                       "three_offset", "gene_start", "gene_end", "gene_name", "gene_strand"]]
-        self.testingDfOut.to_csv(path_or_buf=self.testingFn + '.predicted.txt',
-                                 sep='\t', header=True, index=False)
+        self.testingDf["asite"] = self.reducedClf.predict(sltTestingX)
+        #self.testingDfOut = testingDf[["chrom", "start", "end", "name", "strand", "asite", "gene_name", "gene_strand"]
+        #                              + self.colNames ]
+        self.testingDf.to_csv(path_or_buf=self.testingFn + '.predicted.txt', sep='\t', header=True, index=False)
 
     def svmFit(self):
         ## grid search
@@ -146,7 +143,7 @@ class trainModel(object):
         print("[status]\t best estimator parameters: c=", self.clfGs.best_estimator_.C, flush=True)
         ## model fitting and cross validation
         self.clf = svm.SVC(C=self.clfGs.best_estimator_.C)
-        scores = cross_validation.cross_val_score(self.clf, self.X, self.y, cv=10)
+        scores = cross_val_score(self.clf, self.X, self.y, cv=10)
         print("[status]\tAccuracy: %0.3f (+/- %0.3f)" % (scores.mean(), scores.std() * 2), flush=True)
 
     def rocCurve(self):
@@ -194,21 +191,21 @@ class trainModel(object):
 
     def recoverAsite(self):
         ## [temp] import the predicted a-site location df
-        # self.testingDfOut = pd.read_table(self.testingFn+'.predicted.txt',  header=0)
+        # self.testingDf = pd.read_table(self.testingFn+'.predicted.txt',  header=0)
 
         ## adjust by the a-site location and calculate the a-site location in nt space, -1 is the missing value
-        self.testingDfOut['asite_start'] = np.where(self.testingDfOut['gene_strand'] == '+',
-                                                    (self.testingDfOut['start'] + self.testingDfOut['asite']),
-                                                    (-1) ).astype(int)
-        self.testingDfOut['asite_end'] = np.where(self.testingDfOut['gene_strand'] == '+',
-                                                  (self.testingDfOut['asite_start'] + 3),
-                                                  (self.testingDfOut['end'] - self.testingDfOut['asite']) ).astype(int)
-        self.testingDfOut['asite_start'] = np.where(self.testingDfOut['gene_strand'] == '-',
-                                                    (self.testingDfOut['asite_end'] - 3),
-                                                    (self.testingDfOut['asite_start']) ).astype(int)
+        self.testingDf['asite_start'] = np.where(self.testingDf['gene_strand'] == '+',
+                                                 (self.testingDf['start'] + self.testingDf['asite']),
+                                                 (-1) ).astype(int)
+        self.testingDf['asite_end'] = np.where(self.testingDf['gene_strand'] == '+',
+                                               (self.testingDf['asite_start'] + 3),
+                                               (self.testingDf['end'] - self.testingDf['asite']) ).astype(int)
+        self.testingDf['asite_start'] = np.where(self.testingDf['gene_strand'] == '-',
+                                                 (self.testingDf['asite_end'] - 3),
+                                                 (self.testingDf['asite_start']) ).astype(int)
 
         ## use to group by command to retrieve ribosome coverage
-        coverageDf = self.testingDfOut.groupby(["chrom", "asite_start", "asite_end"])
+        coverageDf = self.testingDf.groupby(["chrom", "asite_start", "asite_end"])
         coverageDf = coverageDf.size().reset_index(name="ribosome_count")
         # groupbyDfCount.to_csv(path_or_buf='groupby_df_count.txt', sep='\t', header=True, index=False)
 
@@ -268,7 +265,7 @@ if __name__ == '__main__':
             model.rocCurve()
             print("[execute]\tpredicting the a-site from the testing data", flush=True)
             model.rfPredict()
-            print("[execute]\tlocalize the a-site codon and create coverage df/vectors", flush=True)
+            print("[execute]\tlocalize the a-site codon and create coverage df", flush=True)
             model.recoverAsite()
 
         elif classifier == "svm":
