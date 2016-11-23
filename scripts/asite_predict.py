@@ -19,11 +19,11 @@ from matplotlib import rcParams
 rcParams.update({'figure.autolayout': True})
 import os
 import sys
+import argparse
 import pandas as pd
 import seaborn as sns
 import numpy as np
 import pybedtools as pbt
-import argparse
 from sklearn import preprocessing, svm, tree
 from sklearn.metrics import roc_curve, auc
 from sklearn.preprocessing import label_binarize
@@ -38,12 +38,12 @@ class visualizeAsite(object):
     '''
     def __init__(self, asiteFn):
         self.asiteFn = asiteFn
-        self.asiteDf = pd.read_table(self.asiteFn,  header=0)
+        self.asiteDf = pd.read_table(asiteFn,  header=0)
 
     def plot(self):
         sns.set(font_scale=2)
         g0 = sns.FacetGrid(self.asiteDf, row="five_offset", col="read_length", margin_titles=True,
-                           col_order= list(range(25,36)),
+                           col_order= list(range(20,36)),
                            row_order= list(range(3)))
         bins = np.linspace(12, 21, 10)
         g0.map(plt.hist, "asite", color="steelblue", bins=bins, lw=0,normed=True)
@@ -53,7 +53,7 @@ class visualizeAsite(object):
         plt.clf()
 
         g1 = sns.FacetGrid(self.asiteDf, row="three_offset", col="read_length", margin_titles=True,
-                           col_order= list(range(25,36)),
+                           col_order= list(range(20,36)),
                            row_order= list(range(3)))
         bins = np.linspace(12, 21, 10)
         g1.map(plt.hist, "asite", color="steelblue", bins=bins, lw=0,normed=True)
@@ -70,7 +70,7 @@ class trainModel(object):
         self.asiteFn = object.asiteFn
         self.colNames = list(self.traningDf.columns.values)
         self.colNames.remove("asite")
-        self.X = np.array(pd.get_dummies(self.traningDf[self.colNames]) )
+        self.X = np.array(pd.get_dummies(self.traningDf[self.colNames]))
         self.y = np.array(self.traningDf["asite"])
         self.testingFn = testingFn
         self.testingDf = pd.read_table(self.testingFn, header=0) # .dropna()
@@ -92,14 +92,14 @@ class trainModel(object):
         self.reducedClf = RandomForestClassifier(max_features=None, n_jobs=-1)
         self.reducedClf = self.reducedClf.fit(self.sltX, self.y)
         ## feature selection based on thresholding
-        cutoff = 0.01
-        self.selector = SelectFromModel(self.reducedClf, prefit=True, threshold=cutoff)
-        self.sltX = self.selector.transform(self.sltX)
-        numSltFeatures = self.sltX.shape[1]
-        print("[status]\t", str(numSltFeatures), "features with importance higher than", str(cutoff), flush=True)
+        #cutoff = 0.02
+        #self.selector = SelectFromModel(self.reducedClf, prefit=True, threshold=cutoff)
+        #self.sltX = self.selector.transform(self.sltX)
+        #numSltFeatures = self.sltX.shape[1]
+        #print("[status]\t", str(numSltFeatures), "features with importance higher than", str(cutoff), flush=True)
         ## define a new classifier for reduced features
-        self.reducedClf = RandomForestClassifier(max_features=None, n_jobs=-1)
-        self.reducedClf = self.reducedClf.fit(self.sltX, self.y)
+        #self.reducedClf = RandomForestClassifier(max_features=None, n_jobs=-1)
+        #self.reducedClf = self.reducedClf.fit(self.sltX, self.y)
         ## cross validation
         scores = cross_val_score(self.reducedClf, self.sltX, self.y, cv=10)
         print("[status]\tAccuracy: %0.3f (+/- %0.3f)" % (scores.mean(), scores.std() * 2), flush=True)
@@ -124,17 +124,11 @@ class trainModel(object):
     def rfPredict(self):
         ## create df for testing data
         self.testingDf = pd.read_table(self.testingFn,  header=0)
-        #colNames = list(testingDf.columns.values)
-        #namesToExclude = set(["gene_start", "gene_end", "gene_name", "chrom", "start", "end", "name", "mapq", "strand"])
-        #remainColNames = [x for x in colNames if x not in namesToExclude]
-        #testingX = np.array(pd.get_dummies(testingDf[remainColNames]) )
         testingX = np.array(pd.get_dummies(self.testingDf[self.colNames]) )
         ## selected a subset of features and predict a-site
         sltTestingX = self.selector.transform(testingX)
         self.testingDf["asite"] = self.reducedClf.predict(sltTestingX)
-        #self.testingDfOut = testingDf[["chrom", "start", "end", "name", "strand", "asite", "gene_name", "gene_strand"]
-        #                              + self.colNames ]
-        self.testingDf.to_csv(path_or_buf=self.testingFn + '.predicted.txt', sep='\t', header=True, index=False)
+        #self.testingDf.to_csv(path_or_buf=self.testingFn + '.predicted.txt', sep='\t', header=True, index=False)
 
     def svmFit(self):
         ## grid search
@@ -162,9 +156,7 @@ class trainModel(object):
         else:
             y_score = self.OvrClf.fit(X_train, y_train).decision_function(X_test)
         # Compute ROC curve and ROC area for each class
-        fpr = dict()
-        tpr = dict()
-        roc_auc = dict()
+        fpr, tpr, roc_auc = {}, {}, {}
         for i in range(nClasses):
             fpr[i], tpr[i], _ = roc_curve(y_test[:, i], y_score[:, i])
             roc_auc[i] = auc(fpr[i], tpr[i])
@@ -192,9 +184,6 @@ class trainModel(object):
         plt.savefig(self.asiteFn + ".roc.pdf")
 
     def recoverAsite(self):
-        ## [temp] import the predicted a-site location df
-        # self.testingDf = pd.read_table(self.testingFn+'.predicted.txt',  header=0)
-
         ## adjust by the a-site location and calculate the a-site location in nt space, -1 is the missing value
         self.testingDf['asite_start'] = np.where(self.testingDf['gene_strand'] == '+',
                                                  (self.testingDf['start'] + self.testingDf['asite']),
@@ -205,15 +194,12 @@ class trainModel(object):
         self.testingDf['asite_start'] = np.where(self.testingDf['gene_strand'] == '-',
                                                  (self.testingDf['asite_end'] - 3),
                                                  (self.testingDf['asite_start']) ).astype(int)
-
         ## use to group by command to retrieve ribosome coverage
         coverageDf = self.testingDf.groupby(["chrom", "asite_start", "asite_end"])
         coverageDf = coverageDf.size().reset_index(name="ribosome_count")
-        # groupbyDfCount.to_csv(path_or_buf='groupby_df_count.txt', sep='\t', header=True, index=False)
 
         ## left outer join the null df and the groupby_df_count to get ribsome counts at each position
-        self.riboCountDf = pd.merge(self.cdsIdxDf, coverageDf, how = "left",
-                                    on = ["chrom", "asite_start", "asite_end"])
+        self.riboCountDf = pd.merge(self.cdsIdxDf, coverageDf, how = "left", on = ["chrom", "asite_start", "asite_end"])
         self.riboCountDf["ribosome_count"].fillna(value=0, inplace=True)
         self.riboCountDf["ribosome_count"] = self.riboCountDf["ribosome_count"].astype(int)
         self.riboCountDf = self.riboCountDf.sort_values(by=["chrom", "asite_start", "asite_end"])
