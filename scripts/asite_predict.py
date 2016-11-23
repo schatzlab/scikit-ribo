@@ -87,17 +87,19 @@ class trainModel(object):
         self.selector = RFECV(self.clf, step=1, cv=5)
         self.selector = self.selector.fit(self.X, self.y)
         self.sltX = self.selector.transform(self.X)
-        print("[status]\tOptimal number of features : %d" % self.selector.n_features_)
-        ## prev: feature selection based on thresholding
-        # self.selector = SelectFromModel(self.clf, prefit=True, threshold=0.03)
-        # self.sltX = self.selector.transform(self.X)
-        # n_selected_features = self.sltX.shape[1]
-        # print("[status]\tNumber of selected features:\t"+ str(n_selected_features), flush=True)
-
+        print("[status]\tOptimal number of features based on recursive selection: %d" % self.selector.n_features_)
         ## define a new classifier for reduced features
         self.reducedClf = RandomForestClassifier(max_features=None, n_jobs=-1)
         self.reducedClf = self.reducedClf.fit(self.sltX, self.y)
-
+        ## feature selection based on thresholding
+        cutoff = 0.01
+        self.selector = SelectFromModel(self.reducedClf, prefit=True, threshold=cutoff)
+        self.sltX = self.selector.transform(self.sltX)
+        numSltFeatures = self.sltX.shape[1]
+        print("[status]\t", str(numSltFeatures), "features with importance higher than", str(cutoff), flush=True)
+        ## define a new classifier for reduced features
+        self.reducedClf = RandomForestClassifier(max_features=None, n_jobs=-1)
+        self.reducedClf = self.reducedClf.fit(self.sltX, self.y)
         ## cross validation
         scores = cross_val_score(self.reducedClf, self.sltX, self.y, cv=10)
         print("[status]\tAccuracy: %0.3f (+/- %0.3f)" % (scores.mean(), scores.std() * 2), flush=True)
@@ -226,8 +228,7 @@ if __name__ == '__main__':
     parser.add_argument("-i", help="input a-site file, required")
     parser.add_argument("-t", help="input testing data for the entire CDS region, required")
     parser.add_argument("-d", help="input index data-frame for the entire CDS region, required")
-    parser.add_argument("-c", help="classifier to use, random forest (rf) or "
-                                   "\support vector machine (svm), optional, default: rf", default="rf")
+    parser.add_argument("-c", help="classifier to use, random forest (rf) or svm, optional, default: rf", default="rf")
     parser.add_argument("-o", help="output path, required")
 
     ## check if there is any argument
