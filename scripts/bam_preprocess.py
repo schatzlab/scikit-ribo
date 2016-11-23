@@ -85,20 +85,25 @@ class processAln(object):
 
     def posIndex(self):
         ## create a dict to store the position read-frame and index info
-        self.offsets = []
+        self.posOffsets = []
+        self.negOffsets = []
         with open(self.posRanges, 'r') as f:
             next(f)
             for line in f:
                 gene, chr, strand, ranges = line.rstrip("\n").split("\t")
                 boxes = [(int(i[0]), int(i[1]), int(i[2])) for i in [j.split(",") for j in ranges.split("|") ]]
-                if strand == "-": boxes = boxes[::-1]
                 if strand == "+":
-                    self.offsets.extend([[gene, pos, box[2]+(pos-(box[0]-15))%3 ] for box in boxes for pos in range(box[0]-15, box[1]+12)])
+                    self.posOffsets.extend([[gene, pos, (abs(pos-(box[0]-15)) + box[2])%3] for box in boxes for pos in range(box[0]-15, box[1]+12)])
                 else:
-                    self.offsets.extend([[gene, pos, box[2]+((box[1]+15)-pos)%3 ] for box in boxes for pos in range(box[1]+15, box[0]-12, -1)])
-        self.offsets = pd.DataFrame(self.offsets, columns=["gene_name", "pos", "offset"])
+                    boxes = boxes[::-1] # flip the order
+                    self.negOffsets.extend([[gene, pos, (abs(pos-(box[1]+15)) + box[2])%3] for box in boxes for pos in range(box[1]+15, box[0]-12, -1)])
+
+        self.posOffsets = pd.DataFrame(self.posOffsets, columns=["gene_name", "pos", "offset"]).drop_duplicates(subset=["gene_name", "pos"])
+        self.negOffsets = pd.DataFrame(self.negOffsets, columns=["gene_name", "pos", "offset"]).drop_duplicates(subset=["gene_name", "pos"])
+
+        # self.offsets.to_csv(path_or_buf='offsets.testing.txt', sep='\t', header=True, index=False)
+        ## save for dask
         # self.offsets = dd.from_pandas(self.offsets, npartitions=2)
-        # self.posDic[gene] = [(int(i[0]), int(i[1]), int(i[2])) for i in [j.split(",") for j in ranges.split("|") ]]
 
     def sortBam(self):
         self.bedtool = pbt.BedTool(self.outBam)
@@ -123,14 +128,18 @@ class processAln(object):
         trainingDf['asite'] = np.where(trainingDf['gene_strand'] == '+',
                                        trainingDf['sc_start'] - trainingDf['start'] + 3,
                                        trainingDf['end'] - trainingDf['sc_end'] + 3 )
-        ## phasing
-        trainingDf = pd.merge(trainingDf, self.offsets, left_on=["gene_name", "start"], right_on=["gene_name","pos"])
+        ## phasing 5'
+        trainingA = pd.merge(trainingDf, self.posOffsets, left_on=["gene_name", "start"], right_on=["gene_name","pos"])
+        trainingB = pd.merge(trainingDf, self.negOffsets, left_on=["gene_name", "end"], right_on=["gene_name","pos"])
+        trainingDf = pd.concat([trainingA, trainingB])
         trainingDf.rename(columns={'offset':'five_offset'}, inplace=True)
-        trainingDf = pd.merge(trainingDf, self.offsets, left_on=["gene_name", "end"], right_on=["gene_name","pos"])
+        ## phasing 3'
+        trainingA = pd.merge(trainingDf, self.posOffsets, left_on=["gene_name", "end"], right_on=["gene_name","pos"])
+        trainingB = pd.merge(trainingDf, self.negOffsets, left_on=["gene_name", "start"], right_on=["gene_name","pos"])
+        trainingDf = pd.concat([trainingA, trainingB])
         trainingDf.rename(columns={'offset':'three_offset'}, inplace=True)
-
-        ## filter a read by whether it has a-site that satisfies [12,18]
-        trainingDf = trainingDf[((trainingDf['asite'] >= 12) & (trainingDf['asite'] <= 18))]
+        ## filter a read by whether it has a-site that satisfies [9,18]
+        trainingDf = trainingDf[((trainingDf['asite'] >= 9) & (trainingDf['asite'] <= 18))]
         trainingDf = trainingDf[(trainingDf['asite'] >= trainingDf['read_length'] / 2 - 1)]
         ## slice the dataframe to the variables needed for training data, removed "start_nt", "end_nt"
         trainingDf = trainingDf[["asite", "read_length", "five_offset", "three_offset", "gene_strand"]]
@@ -162,10 +171,15 @@ class processAln(object):
                                                     'gene_blockCount', 'gene_blockSizes', 'gene_blockStarts'],
                                              dtype={'blockSizes':'object','blockStarts':'object',
                                                     'gene_blockSizes':'object','gene_blockStarts':'object'})
-        # merge df
-        testingDf = pd.merge(testingDf, self.offsets, left_on=["gene_name", "start"], right_on=["gene_name","pos"])
+        ## phasing 5'
+        testingA = pd.merge(testingDf, self.posOffsets, left_on=["gene_name", "start"], right_on=["gene_name","pos"])
+        testingB = pd.merge(testingDf, self.negOffsets, left_on=["gene_name", "end"], right_on=["gene_name","pos"])
+        testingDf = pd.concat([testingA, testingB])
         testingDf.rename(columns={'offset':'five_offset'}, inplace=True)
-        testingDf = pd.merge(testingDf, self.offsets, left_on=["gene_name", "end"], right_on=["gene_name","pos"])
+        ## phasing 3'
+        testingA = pd.merge(testingDf, self.posOffsets, left_on=["gene_name", "end"], right_on=["gene_name","pos"])
+        testingB = pd.merge(testingDf, self.negOffsets, left_on=["gene_name", "start"], right_on=["gene_name","pos"])
+        testingDf = pd.concat([testingA, testingB])
         testingDf.rename(columns={'offset':'three_offset'}, inplace=True)
         ## slice the dataframe to the variables needed for training data
         testingDf = testingDf[["read_length", "five_offset", "three_offset", "gene_strand", "chrom", "start", "end"]]
@@ -190,7 +204,7 @@ if __name__ == '__main__':
     parser.add_argument("-i", help="input bam file")
     parser.add_argument("-p", help="prefix for BED/index files")
     parser.add_argument("-q", help="minimum mapq allowed, Default: 20", default=20, type=int)
-    parser.add_argument("-l", help="shortest read length allowed, Default: 25", default=20, type=int)
+    parser.add_argument("-l", help="shortest read length allowed, Default: 20", default=20, type=int)
     parser.add_argument("-u", help="longest read length allowed, Default: 35", default=35, type=int)
     parser.add_argument("-o", help="output filtered bam file")
 
@@ -204,32 +218,32 @@ if __name__ == '__main__':
     ## process the file if the input files exist
     if (args.i != None and args.p != None and args.o != None):
         ## specify inputs
-        in_bam_fn = args.i
+        inBam = args.i
         mapq = args.q
-        out_bam_fn = args.o
-        min_read_length = args.l
-        max_read_length = args.u
-        start_codons = args.p + ".sort.start.bed"
+        outBam = args.o
+        minReadLen = args.l
+        maxReadLen = args.u
+        startCodons = args.p + ".sort.start.bed"
         orf = args.p + ".sort.CDS.bed"
-        pos_ranges = args.p + ".pos_ranges.txt"
+        posRanges = args.p + ".pos_ranges.txt"
         time = str(datetime.now())
         print("[status]\tStart the module at", time, flush=True)
-        print("[status]\tprocessing the input bam file: " + in_bam_fn, flush=True)
-        print("[status]\toutput bam file name: " + out_bam_fn, flush=True)
-        print("[status]\treading the start codon BED file: " + start_codons, flush=True)
-        print("[status]\treading the open reading frame codon BED file: " + orf, flush=True)
-        print("[status]\treading the position-phase file: " + pos_ranges, flush=True)
+        print("[status]\tprocessing the input bam file:",  inBam, flush=True)
+        print("[status]\toutput bam file name:", outBam, flush=True)
+        print("[status]\treading the start codon BED file:", startCodons, flush=True)
+        print("[status]\treading the open reading frame codon BED file:", orf, flush=True)
+        print("[status]\treading the position-phase file:", posRanges, flush=True)
 
         ## filter alignment
-        print("[execute]\tkeep only reads with length between [" + str(min_read_length) + "," + str(max_read_length) +
-              "] and mapq of " + str(mapq), flush=True)
-        aln = processAln(in_bam_fn, mapq, out_bam_fn, min_read_length, max_read_length, start_codons, orf, pos_ranges)
+        print("[execute]\tkeep only reads with length [" + str(minReadLen) + "," + str(maxReadLen) + "] and mapq = " +
+              str(mapq), flush=True)
+        aln = processAln(inBam, mapq, outBam, minReadLen, maxReadLen, startCodons, orf, posRanges)
         print("[execute]\tfilter out overlapping regions", flush=True)
         aln.filterRegion()
         print("[execute]\timport the position ranges", flush=True)
         aln.posIndex()
         print("[execute]\tfilter out un-reliable alignment from bam files", flush=True)
-        #aln.filterBam()
+        aln.filterBam()
         time = str(datetime.now())
         print("[execute]\tcreate dataframe - training data", time, flush=True)
         aln.makeTrainingData()
