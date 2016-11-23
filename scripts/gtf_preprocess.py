@@ -27,11 +27,11 @@ from itertools import groupby
 class gtf2Bed(object):
     ''' class to sort and get start codon from a gtf file
     '''
-    def __init__(self, gtf, fasta, pairprobFn, tpm, output):
+    def __init__(self, gtf, fasta, pairprobFn, tpmFn, output):
         self.gtf = gtf
         self.fasta = fasta
         self.pairprobFn = pairprobFn
-        self.tpm = tpm
+        self.tpmFn = tpmFn
         self.bedtool = pbt.BedTool(self.gtf)
         self.base = os.path.basename(self.gtf)
         self.prefix = output + "/" + os.path.splitext(self.base)[0]
@@ -116,7 +116,7 @@ class gtf2Bed(object):
         ## construct the gene level df from the bed12 file
         codons = []
         posRangesWriter = open(self.prefix + ".pos_ranges.txt", "w")
-        posRangesWriter.write("#gene_name\tpos_ranges\n")
+        posRangesWriter.write("#gene_name\tchr\tstrand\tpos_ranges\n")
         for geneName in self.cdsBtDf.gene_name:
             ## get the info from df
             curr = self.cdsBtDf.loc[self.cdsBtDf["gene_name"] == geneName]
@@ -157,7 +157,7 @@ class gtf2Bed(object):
 
             ## create position ranges file for look ups
             posRangesStr = "|".join([ str(i[0]) + "," + str(i[1]) + "," + str(i[2]) for i in posRangesUpstream])
-            posRangesWriter.write(geneName + "\t" + posRangesStr + "\n")
+            posRangesWriter.write(geneName + "\t" + chrom + "\t" + geneStrand + "\t" + posRangesStr + "\n")
 
             ## coding region of a gene
             if geneStrand == "+":
@@ -179,14 +179,28 @@ class gtf2Bed(object):
         self.codonsDf = pd.DataFrame(codons, columns=["chrom", "asite_start", "asite_end", "gene_name", "codon_idx",
                                                       "gene_strand", "codon", "reading_frame"])
 
+    def loadTpm(self):
+        self.tpm = pd.read_table(self.tpmFn,  header=0)
+        tpmColNames = set(list(self.tpm.columns.values))
+        if 'TPM' in tpmColNames:
+            tool = 'Salmon'
+            self.tpm = self.tpm[["Name", "TPM"]]
+            self.tpm.columns = ["gene_name", "TPM"]
+        elif 'tpm' in tpmColNames:
+            tool = 'Kallisto'
+            self.tpm = self.tpm[["target_id", "tpm"]]
+            self.tpm.columns = ["gene_name", "TPM"]
+        else:
+            exit("Check file format, only support Salmon or Kallisto")
+        print("[status]\tTPM input is from ", str(tool), flush=True)
+
+
     def mergeDf(self):
         ## import the salmon df, rna secondary structure, and merge with cds df
-        tpm = pd.read_table(self.tpm,  header=0)
-        codonsTpm = pd.merge(self.codonsDf, tpm, how = "inner", left_on = ["gene_name"], right_on="Name")
-        codonsTpmPairprob = pd.merge(codonsTpm, self.pairProb, how = "left", on = ["gene_name", "codon_idx"]).fillna('NA')
-        codonsTpmPairprobOut = codonsTpmPairprob[["chrom", "asite_start", "asite_end", "gene_name", "codon_idx",
-                                                  "gene_strand", "codon", "TPM", "pair_prob"]]
-        codonsTpmPairprobOut.to_csv(path_or_buf=self.prefix + '.cds_codons.bed', sep='\t', header=True, index=False)
+        codons = pd.merge(self.codonsDf, self.tpm, how = "inner")
+        codons = pd.merge(codons, self.pairProb, how = "left", on = ["gene_name", "codon_idx"]).fillna('NA')
+        codons = codons[["chrom", "asite_start", "asite_end", "gene_name", "codon_idx", "gene_strand", "codon", "TPM", "pair_prob"]]
+        codons.to_csv(path_or_buf=self.prefix + '.cds_codons.bed', sep='\t', header=True, index=False)
 
 ## the main process
 if __name__ == '__main__':
@@ -229,6 +243,8 @@ if __name__ == '__main__':
         gtf_hdl.getCodons()
         print("[execute]\tCreating the codon table for the coding region", flush=True)
         gtf_hdl.createCodonTable()
+        print("[execute]\tLoading tpm", flush=True)
+        gtf_hdl.loadTpm()
         print("[execute]\tMerging all the df together", flush=True)
         gtf_hdl.mergeDf()
         ## finish
