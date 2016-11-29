@@ -22,15 +22,17 @@ import seaborn as sns
 import numpy as np
 import pybedtools as pbt
 import argparse
+import multiprocessing
 
 
 class figures(object):
     ''' define a class for plotting figures
     '''
-    def __init__(self, fn, output):
+    def __init__(self, fn, output, processes):
         #self.geneName = name
         self.riboDf = pd.read_table(fn,  header=0)
         self.output = output
+        self.processes = processes
 
     def plotCoverageOnGene(self, geneName):
         ## confirm the gene exist
@@ -48,9 +50,6 @@ class figures(object):
             pairProb = pairProb[::-1]
 
         riboCnt = riboCnt[10:]
-        ## save the ribosome count array to a txt file
-        np.savetxt(self.output + "/riboCounts/" + str(geneName) + ".txt", riboCnt, fmt='%i', delimiter=' ', newline=' ')
-
         ## sliding window average of the pair probability
         window = np.ones(5).astype(float)/5.0
         slidingWindowAvg = np.convolve(pairProb, window,mode="valid")
@@ -84,8 +83,9 @@ class figures(object):
 
     def plotAllGenes(self):
         ## loop over all genes and plot
-        for geneName in set(self.riboDf["gene_name"]):
-            self.plotCoverageOnGene(geneName)
+        geneNames = set(self.riboDf["gene_name"])
+        pool = multiprocessing.Pool(self.processes)
+        pool.map(self.plotCoverageOnGene, geneNames)
         print("[status]\tFinished plotting all genes.", flush=True)
 
 
@@ -96,6 +96,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", help="input data frame, required")
     parser.add_argument("-g", help="gene of interest, or type [all] - automatically plot all genes, required")
+    parser.add_argument("-p", help="number of processes, Default: 1", default=1, type=int)
     parser.add_argument("-o", help="output path, required")
 
     ## check if there is any argument
@@ -110,12 +111,13 @@ if __name__ == '__main__':
         print("[status]\tprocessing the input file: " + args.i, flush=True)
         df_fn = args.i
         gene_name = args.g
+        processes = args.p
         output = args.o
         # create folders
-        cmd = "mkdir -p " + output + "/plots; mkdir -p " + output + "/riboCounts "
+        cmd = "mkdir -p " + output + "/plots" #; mkdir -p " + output + "/riboCounts "
         os.system(cmd)
         # all genes or one gene
-        fig = figures(df_fn, output)
+        fig = figures(df_fn, output, processes)
         if gene_name != "all":
             print("[execute]\tplotting ribosome coverage for gene: " + str(gene_name), flush=True)
             fig.plotCoverageOnGene(gene_name)
