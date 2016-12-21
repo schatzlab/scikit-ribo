@@ -36,19 +36,20 @@ class gtf2Bed(object):
         self.base = os.path.basename(self.gtf)
         self.prefix = output + "/" + os.path.splitext(self.base)[0]
         self.geneBed12s = []
+        self.geneNames = []
 
     def convertGtf(self):
         ## create a db from the gtf file
         self.db = gffutils.create_db(self.gtf, ":memory:", force=True)
 
         ## retrieve a list of gene names with type "CDS" from db
-        geneNames = []
+
         for gene in self.db.features_of_type("CDS", order_by=("seqid","start") ):
-            geneNames.append(gene['gene_id'][0])
-        geneNames = list(set(geneNames))
+            self.geneNames.append(gene['gene_id'][0])
+        self.geneNames = list(set(self.geneNames))
 
         ## convert a gtf/gff3 file to bed12 and save to a nested list
-        for geneName in geneNames:
+        for geneName in self.geneNames:
             geneBed12 = self.db.bed12(geneName, name_field='gene_id')
             row = geneBed12.split("\t")
             self.geneBed12s.append([row[0], int(row[1]), int(row[2])] + row[3:])
@@ -93,24 +94,68 @@ class gtf2Bed(object):
                     codonIdx += 1
         self.pairProb = pd.DataFrame(pairProb, columns= ["gene_name","codon_idx","pair_prob"])
 
-    def fastaIter(self, fastaFn):
+    def fastaIter(self, fastaFn, mode):
         fh = open(fastaFn)
         faiter = (x[1] for x in groupby(fh, lambda line: line[0] == ">"))
+        codonDic = {}
         fastaDic = {}
         for header in faiter:
             geneName = header.__next__()[1:].strip()
             seq = "".join(s.strip() for s in faiter.__next__())
             seqLst = [seq[i:i+3] for i in range(0, len(seq), 3)]
-            fastaDic[geneName] = seqLst
-        return fastaDic
+            codonDic[geneName] = seqLst
+            fastaDic[geneName] = seq
+        # return wrt to mode
+        if mode == "codon":
+            return codonDic
+        elif mode == "seq":
+            return fastaDic
+
+    def fiveUtrBed(self, feature):
+        fiveUtr = feature[:6]
+        fiveUtr[1], fiveUtr[2] = int(fiveUtr[1]), int(fiveUtr[2])
+        if feature.strand == "+":
+            fiveUtr[1], fiveUtr[2] = fiveUtr[1]-30, fiveUtr[1]
+        elif feature.strand == "-":
+            fiveUtr[1], fiveUtr[2] = fiveUtr[2], fiveUtr[2]+30
+        return pbt.create_interval_from_list(fiveUtr)
+
+    def threeUtrBed(self, feature):
+        threeUtr = feature[:6]
+        threeUtr[1], threeUtr[2] = int(threeUtr[1]), int(threeUtr[2])
+        if feature.strand == "+":
+            threeUtr[1], threeUtr[2] = threeUtr[2], threeUtr[2]+30
+        elif feature.strand == "-":
+            threeUtr[1], threeUtr[2] = threeUtr[1]-30, threeUtr[1]
+        return pbt.create_interval_from_list(threeUtr)
+
+    def getSeq(self):
+        cdsBt = pbt.BedTool(self.prefix + '.sort.CDS.bed')
+        cdsBt.sequence(fi=self.fasta, fo= self.prefix + '.fasta', s=True, name=True,  split=True)
+        self.fastaDic = self.fastaIter(self.prefix + '.fasta', "seq")
+        # utr
+        # cdsBt = pbt.BedTool(self.prefix + '.sort.CDS.bed')
+        fiveUtrBt = cdsBt.each(self.fiveUtrBed)
+        threeUtrBt = cdsBt.each(self.threeUtrBed)
+        fiveUtrBt.sequence(fi=self.fasta, fo=self.prefix + '.5utr.fasta', s=True, name=True,  split=True)
+        threeUtrBt.sequence(fi=self.fasta, fo=self.prefix + '.3utr.fasta', s=True, name=True,  split=True)
+        self.fiveUtrDic = self.fastaIter(self.prefix + '.5utr.fasta', "seq")
+        self.threeUtrDic = self.fastaIter(self.prefix + '.3utr.fasta', "seq")
+        ## write expanded cds fasta to local
+        expandedFasta = open(self.prefix + '.expand.fasta', 'w')
+        for geneName in self.geneNames:
+            expandedFasta.write(">" + geneName + "\n" +
+                                self.fiveUtrDic[geneName] + self.fastaDic[geneName] + self.threeUtrDic[geneName] + "\n")
+        expandedFasta.close()
 
     def getCodons(self):
         ## extract cds sequence from the ref genome, iterate the transcript sequence and yield codons
         cdsBt = pbt.BedTool(self.prefix + '.sort.CDS.bed')
-        cdsBt.sequence(fi=self.fasta, fo= self.prefix + '.fasta', s=True, name=True,  split=True)
+        cdsBt.sequence(fi=self.fasta, fo=self.prefix + '.fasta', s=True, name=True,  split=True)
+        self.codonsDic = self.fastaIter(self.prefix + '.fasta', "codon") # parse a fasta file to a list of codons
+        ## create df
         self.cdsBtDf = cdsBt.to_dataframe(names=['chrom', 'start', 'end', 'gene_name', 'score', 'strand', 'thickStart',
                                                  'thickEnd', 'reserved', 'blockCount', 'blockSizes', 'blockStarts'])
-        self.codonsDic = self.fastaIter(self.prefix + '.fasta') # parse a fasta file to a list of codons
 
     def createCodonTable(self):
         ## construct the gene level df from the bed12 file
@@ -192,7 +237,7 @@ class gtf2Bed(object):
             self.tpm.columns = ["gene_name", "TPM"]
         else:
             exit("Check file format, only support Salmon or Kallisto")
-        print("[status]\tTPM input is from ", str(tool), flush=True)
+        print("[status]\tTPM input is from", str(tool), flush=True)
 
 
     def mergeDf(self):
@@ -240,6 +285,7 @@ if __name__ == '__main__':
         print("[execute]\tTransforming and preparing the df for RNA secondary structure pairing probabilities data", flush=True)
         gtf_hdl.transformPairProb()
         print("[execute]\tBuilding the index for each position at the codon level", flush=True)
+        gtf_hdl.getSeq()
         gtf_hdl.getCodons()
         print("[execute]\tCreating the codon table for the coding region", flush=True)
         gtf_hdl.createCodonTable()
