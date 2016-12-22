@@ -18,8 +18,8 @@ import sys
 import functools
 import csv
 import multiprocessing
+from collections import defaultdict
 import pandas as pd
-# from collections import defaultdict
 
 class rnafold(object):
     ''' process rnafold outputs
@@ -30,6 +30,7 @@ class rnafold(object):
         self.output = output
         self.lengDf = None
         self.header = None
+        self.probDic = multiprocessing.Manager().dict()
 
     def loadFa(self):
         with open(self.fa, 'r') as f:
@@ -69,13 +70,12 @@ class rnafold(object):
         if self.header == "split":
             self.lenDf = pd.DataFrame(lst, columns=["contig", "pos", "length"])
         elif self.header == "gene":
-            self.lenDf = pd.DataFrame(lst, columns=["gene", "length"])
+            self.lenDf = pd.DataFrame(lst, columns=["geneName", "length"])
+        # print(self.lenDf)
         # self.lenDf.to_csv(path_or_buf= 'debug.txt', sep='\t', index=False)
 
     def loadDpps(self, fn):
-        # print ("[status]\tParsing file: " + fn, flush=True)
         filePath = self.folder + "/" + fn
-        # fnSplit = filePath.split("/")[-1]
         # parse file names
         if self.header == "split":
             contig = fn.split("|")[3]
@@ -99,7 +99,13 @@ class rnafold(object):
         lst = [[i] for i in range(geneLength)]
         fullDf = pd.DataFrame(lst, columns=["pos"])
         df = pd.merge(fullDf, probs, how = "left").fillna(0)
-        df.to_csv(path_or_buf= self.output + "/" + fn + '.pair_prob.txt', sep='\t', header=False, index=False)
+        # df.to_csv(path_or_buf= self.output + "/" + fn + '.pair_prob.txt', sep='\t', header=False, index=False)
+        # save to dic
+        if self.header == "gene":
+            gene = geneName
+        elif self.header == "split":
+            gene = contig + "|" + pos
+        self.probDic[gene] = df["probability"].tolist()
 
     def loadAll(self):
         fileNames = []
@@ -109,6 +115,13 @@ class rnafold(object):
         pool = multiprocessing.Pool(4)
         pool.map(self.loadDpps, fileNames)
         print("[status]\tFinished loading rnafold results for all.", flush=True)
+
+    def mergeAll(self):
+        csvFile = open('test.pairprob.txt', 'w')
+        for k, v in self.probDic.items():
+            csvFile.write(k + " " + " ".join(str(i) for i in v) + "\n")
+        csvFile.close()
+
 
 ## the main process
 if __name__ == '__main__':
@@ -141,6 +154,7 @@ if __name__ == '__main__':
         rna.loadFa()
         print ("[status]\tParsing the pairing probability file", flush=True)
         rna.loadAll()
+        rna.mergeAll()
     else:
         print ("[error]\tmissing argument", flush=True)
         parser.print_usage()
