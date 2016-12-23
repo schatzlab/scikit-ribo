@@ -71,7 +71,6 @@ class rnafold(object):
             self.lenDf = pd.DataFrame(lst, columns=["contig", "pos", "length"])
         elif self.header == "gene":
             self.lenDf = pd.DataFrame(lst, columns=["geneName", "length"])
-        # print(self.lenDf)
         # self.lenDf.to_csv(path_or_buf= 'debug.txt', sep='\t', index=False)
 
     def loadDpps(self, fn):
@@ -99,7 +98,7 @@ class rnafold(object):
         lst = [[i] for i in range(geneLength)]
         fullDf = pd.DataFrame(lst, columns=["pos"])
         df = pd.merge(fullDf, probs, how = "left").fillna(0)
-        # df.to_csv(path_or_buf= self.output + "/" + fn + '.pair_prob.txt', sep='\t', header=False, index=False)
+        # df.to_csv(path_or_buf= self.output + geneName + '.pair_prob.txt', sep='\t', header=False, index=False)
         # save to dic
         if self.header == "gene":
             gene = geneName
@@ -117,18 +116,18 @@ class rnafold(object):
         print("[status]\tFinished loading rnafold results for all.", flush=True)
 
     def mergeAll(self):
-        csvFile = open('test.pairprob.txt', 'w')
+        csvFile = open(self.output + '.txt', 'w')
         for k, v in self.probDic.items():
-            csvFile.write(k + " " + " ".join(str(i) for i in v) + "\n")
+            csvFile.write(k + "\t" + " ".join(str(i) for i in v) + "\n")
         csvFile.close()
 
 
 ## the main process
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("-r", help="ref genome fasta file, required")
+    parser.add_argument("-r", help="transcript fasta file, required")
     parser.add_argument("-f", help="folder of rnafold outputs, required")
-    parser.add_argument("-o", help="output folder, required")
+    parser.add_argument("-o", help="output file prefix, required")
 
     ## check if there is any argument
     if len(sys.argv) <= 1:
@@ -141,20 +140,18 @@ if __name__ == '__main__':
     if (args.f!=None):
         print ("[status]\tReading the input fasta file: " + args.r, flush=True)
         print ("[status]\tReading the rnafold files from " + args.f, flush=True)
-        print ("[status]\tCreated output folder: " + args.o, flush=True)
         fasta = args.r
         folder = args.f
         output = args.o
-        # create output folder
-        cmd = 'mkdir -p ' + output
-        os.system(cmd)
         #
         rna = rnafold(fasta, folder, output)
         print ("[status]\tParsing fasta file", flush=True)
         rna.loadFa()
         print ("[status]\tParsing the pairing probability file", flush=True)
         rna.loadAll()
+        print ("[status]\tMerging the pairing probabilities into one file", flush=True)
         rna.mergeAll()
+        print ("[status]\tFinished.", flush=True)
     else:
         print ("[error]\tmissing argument", flush=True)
         parser.print_usage()
