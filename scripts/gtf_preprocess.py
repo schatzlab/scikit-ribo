@@ -84,12 +84,13 @@ class gtf2Bed(object):
     def transformPairProb(self):
         ## read the pairing prob arrays then convert it to a df
         pairProb = []
-        with open(self.pairprobFn, 'r') as csvFn:
-            csvReader = csv.reader(csvFn, delimiter='\t')
-            for row in csvReader:
-                codonIdx = 0
+        with open(self.pairprobFn, 'r') as fl:
+            for line in fl:
+                row = line.split("\t")
+                codonIdx = -10
                 geneName = row[0]
-                for prob in row[1].split(" "):
+                probs = row[1].split(" ")
+                for prob in probs:
                     pairProb.append([geneName, codonIdx, float(prob)])
                     codonIdx += 1
         self.pairProb = pd.DataFrame(pairProb, columns= ["gene_name","codon_idx","pair_prob"])
@@ -131,8 +132,8 @@ class gtf2Bed(object):
 
     def getSeq(self):
         cdsBt = pbt.BedTool(self.prefix + '.sort.CDS.bed')
-        cdsBt.sequence(fi=self.fasta, fo= self.prefix + '.fasta', s=True, name=True,  split=True)
-        self.fastaDic = self.fastaIter(self.prefix + '.fasta', "seq")
+        cdsBt.sequence(fi=self.fasta, fo= self.prefix + 'cds.fasta', s=True, name=True,  split=True)
+        self.fastaDic = self.fastaIter(self.prefix + 'cds.fasta', "seq")
         # utr
         # cdsBt = pbt.BedTool(self.prefix + '.sort.CDS.bed')
         fiveUtrBt = cdsBt.each(self.fiveUtrBed)
@@ -142,7 +143,7 @@ class gtf2Bed(object):
         self.fiveUtrDic = self.fastaIter(self.prefix + '.5utr.fasta', "seq")
         self.threeUtrDic = self.fastaIter(self.prefix + '.3utr.fasta', "seq")
         ## write expanded cds fasta to local
-        expandedFasta = open(self.prefix + '.expand.fasta', 'w')
+        expandedFasta = open(self.prefix + '.expandCDS.fasta', 'w')
         for geneName in self.geneNames:
             expandedFasta.write(">" + geneName + "\n" +
                                 self.fiveUtrDic[geneName] + self.fastaDic[geneName] + self.threeUtrDic[geneName] + "\n")
@@ -151,25 +152,26 @@ class gtf2Bed(object):
     def getCodons(self):
         ## extract cds sequence from the ref genome, iterate the transcript sequence and yield codons
         cdsBt = pbt.BedTool(self.prefix + '.sort.CDS.bed')
-        cdsBt.sequence(fi=self.fasta, fo=self.prefix + '.fasta', s=True, name=True,  split=True)
-        self.codonsDic = self.fastaIter(self.prefix + '.fasta', "codon") # parse a fasta file to a list of codons
         ## create df
-        self.cdsBtDf = cdsBt.to_dataframe(names=['chrom', 'start', 'end', 'gene_name', 'score', 'strand', 'thickStart',
+        self.cdsDf = cdsBt.to_dataframe(names=['chrom', 'start', 'end', 'gene_name', 'score', 'strand', 'thickStart',
                                                  'thickEnd', 'reserved', 'blockCount', 'blockSizes', 'blockStarts'])
+        # cdsBt.sequence(fi=self.fasta, fo=self.prefix + 'cds.fasta', s=True, name=True,  split=True)
+        self.codonsDic = self.fastaIter(self.prefix + '.expandCDS.fasta', "codon") # parse a fasta file to a list of codons
 
     def createCodonTable(self):
         ## construct the gene level df from the bed12 file
         codons = []
         posRangesWriter = open(self.prefix + ".pos_ranges.txt", "w")
         posRangesWriter.write("#gene_name\tchr\tstrand\tpos_ranges\n")
-        for geneName in self.cdsBtDf.gene_name:
+        ## iterate over each gene
+        for geneName in self.cdsDf.gene_name:
             ## get the info from df
-            curr = self.cdsBtDf.loc[self.cdsBtDf["gene_name"] == geneName]
-            geneStart = curr["start"].values[0]
-            chrom = curr["chrom"].values[0]
-            geneStrand = curr["strand"].values[0]
-            exonStarts = list(map(int, curr["blockStarts"].values[0].split(",")))
-            exonSizes = list(map(int, curr["blockSizes"].values[0].split(",")))
+            row = self.cdsDf.loc[self.cdsDf["gene_name"] == geneName]
+            geneStart = row["start"].values[0]
+            chrom = row["chrom"].values[0]
+            geneStrand = row["strand"].values[0]
+            exonStarts = list(map(int, row["blockStarts"].values[0].split(",")))
+            exonSizes = list(map(int, row["blockSizes"].values[0].split(",")))
 
             ## extract the cds nt index, the order of exons, and save to a nested list
             posRanges = []
@@ -186,37 +188,27 @@ class gtf2Bed(object):
                     phase = (3 - (distance % 3)) % 3
                     posRanges.append((geneStart + exonStarts[i], geneStart + exonStarts[i] + exonSizes[i], phase))
 
-            ## add 10 codons upstream of a gene 
-            upstreamCounter = 10
-            while upstreamCounter > 0:
-                if geneStrand == "+":
-                    posRangesUpstream = [(posRanges[0][0]-30, posRanges[0][0], 0)] + posRanges
-                    for start in range(posRanges[0][0]-30, posRanges[0][0], 3):
-                        codons.append([chrom, start, start+3, geneName, -upstreamCounter, geneStrand, "NA", 0])
-                        upstreamCounter -= 1
-                else:
-                    posRangesUpstream = posRanges + [(posRanges[0][1], posRanges[0][1]+30, 0)]
-                    for end in range(posRanges[-1][1]+30, posRanges[-1][1], -3):
-                        codons.append([chrom, end-3, end, geneName, -upstreamCounter, geneStrand, "NA", 0])
-                        upstreamCounter -= 1
-
+            # add 10 codons upstream and downstream
+            posRanges = [(posRanges[0][0]-30, posRanges[0][0], 0)] + posRanges + [(posRanges[-1][1], posRanges[-1][1]+30, 0)]
             ## create position ranges file for look ups
-            posRangesStr = "|".join([ str(i[0]) + "," + str(i[1]) + "," + str(i[2]) for i in posRangesUpstream])
+            posRangesStr = "|".join([ str(i[0]) + "," + str(i[1]) + "," + str(i[2]) for i in posRanges])
             posRangesWriter.write(geneName + "\t" + chrom + "\t" + geneStrand + "\t" + posRangesStr + "\n")
 
-            ## coding region of a gene
+            ## upstream + coding region + downstream of a gene
             if geneStrand == "+":
                 starts = [start for posRange in posRanges for start in range(posRange[0], posRange[1])]
                 for ntIdx in range(0, len(starts), 3):
-                    codonIdx = int(ntIdx/3)
-                    codon = self.codonsDic[geneName][codonIdx]
+                    expandIdx = int(ntIdx/3)
+                    codonIdx = expandIdx-10
+                    codon = self.codonsDic[geneName][expandIdx]
                     pos = starts[ntIdx]
                     codons.append([chrom, pos, pos+3, geneName, codonIdx, geneStrand, codon, 0])
             else:
                 ends = [end+1 for posRange in posRanges for end in range(posRange[0], posRange[1])][::-1] # reverse
                 for ntIdx in range(0, len(ends), 3):
-                    codonIdx = int(ntIdx/3)
-                    codon = self.codonsDic[geneName][codonIdx]
+                    expandIdx = int(ntIdx/3)
+                    codon = self.codonsDic[geneName][expandIdx]
+                    codonIdx = expandIdx-10
                     pos = ends[ntIdx]
                     codons.append([chrom, pos-3, pos, geneName, codonIdx, geneStrand, codon, 0])
 
@@ -238,7 +230,6 @@ class gtf2Bed(object):
         else:
             exit("Check file format, only support Salmon or Kallisto")
         print("[status]\tTPM input is from", str(tool), flush=True)
-
 
     def mergeDf(self):
         ## import the salmon df, rna secondary structure, and merge with cds df
@@ -280,12 +271,13 @@ if __name__ == '__main__':
         gtf_hdl = gtf2Bed(input_gtf, input_ref, input_pairprob, input_tpm, output)
         print("[execute]\tConverting the the gtf file in to sql db", flush=True)
         gtf_hdl.convertGtf()
-        print("[execute]\tExtracting the start codon from the gtf db", flush=True)
+        print("[execute]\tExtracting the start codons' positions from the gtf db", flush=True)
         gtf_hdl.getStartCodon()
         print("[execute]\tTransforming and preparing the df for RNA secondary structure pairing probabilities data", flush=True)
         gtf_hdl.transformPairProb()
-        print("[execute]\tBuilding the index for each position at the codon level", flush=True)
+        print("[execute]\tExtracting the sequences for each gene", flush=True)
         gtf_hdl.getSeq()
+        print("[execute]\tBuilding the index for each position at the codon level", flush=True)
         gtf_hdl.getCodons()
         print("[execute]\tCreating the codon table for the coding region", flush=True)
         gtf_hdl.createCodonTable()
