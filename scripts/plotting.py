@@ -43,13 +43,10 @@ class figures(object):
         # geneName = self.geneName
         riboCnt = np.array(self.riboDf[self.riboDf["gene_name"] == geneName]["ribosome_count"]) # rm [30:]
         pairProb = np.array(self.riboDf[self.riboDf["gene_name"] == geneName]["pair_prob"])
-
-        ## reverse the array if the strand is -
+        ## reverse the array if the strand is negative
         if self.riboDf.loc[self.riboDf["gene_name"] == geneName]["gene_strand"].values[0] == "-":
             riboCnt = riboCnt[::-1]
             pairProb = pairProb[::-1]
-
-        riboCnt = riboCnt[10:]
         ## sliding window average of the pair probability
         window = np.ones(5).astype(float)/5.0
         slidingWindowAvg = np.convolve(pairProb, window,mode="valid")
@@ -62,8 +59,9 @@ class figures(object):
         #labels = range(-30, riboCnt.size+1)
         # [int(float(item.get_text()))-30 for item in ax1.get_xticklabels()]
         #ax1.set_xticklabels(labels)
-        ax1.axvline(0, color="#999999",dashes=[3,2],zorder=-1) # change to 30
-        ax1.axvline(riboCnt.size ,color="#999999",dashes=[3,2],zorder=-1)
+        startCodonPos, stopCodonPos = 10, riboCnt.size-10
+        ax1.axvline(startCodonPos, color="#999999",dashes=[3,2],zorder=-1) # change to 10
+        ax1.axvline(stopCodonPos ,color="#999999",dashes=[3,2],zorder=-1)
         ax1.set_ylabel("Ribosome counts")
         ax2 = plt.subplot(2, 1, 2)
         ax2.plot(pairProb, sns.xkcd_rgb["medium green"], label="Per codon pairing probability")
@@ -72,8 +70,8 @@ class figures(object):
         ax2.set_ylim([0,1])
         ax2.set_ylabel("Pairing probability")
         ax2.set_xlabel("Position in transcript (5' -> 3')")
-        ax2.axvline(0, color="#999999",dashes=[3,2],zorder=-1) # change to 30
-        ax2.axvline(riboCnt.size ,color="#999999",dashes=[3,2],zorder=-1)
+        ax2.axvline(startCodonPos, color="#999999",dashes=[3,2],zorder=-1) # change to 30
+        ax2.axvline(stopCodonPos,color="#999999",dashes=[3,2],zorder=-1)
         ax2.legend()
         plt.gcf()
         plt.savefig(self.output + "/plots/" + str(geneName) + ".riboCount.pdf")
@@ -90,7 +88,7 @@ class figures(object):
 
 
 ## ----------------------------------------
-## the main work
+## main
 ## ----------------------------------------
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -98,14 +96,12 @@ if __name__ == '__main__':
     parser.add_argument("-g", help="gene of interest, or type [all] - automatically plot all genes, required")
     parser.add_argument("-p", help="number of processes, Default: 1", default=1, type=int)
     parser.add_argument("-o", help="output path, required")
-
     ## check if there is any argument
     if len(sys.argv) <= 1:
         parser.print_usage()
         sys.exit(1)
     else:
         args = parser.parse_args()
-
     ## process the file if the input files exist
     if (args.i != None and args.g != None and args.o != None):
         print("[status]\tprocessing the input file: " + args.i, flush=True)
@@ -114,7 +110,7 @@ if __name__ == '__main__':
         processes = args.p
         output = args.o
         # create folders
-        cmd = "mkdir -p " + output + "/plots" #; mkdir -p " + output + "/riboCounts "
+        cmd = "mkdir -p " + output + "/plots"
         os.system(cmd)
         # all genes or one gene
         fig = figures(df_fn, output, processes)
