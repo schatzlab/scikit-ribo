@@ -15,97 +15,116 @@ from __future__ import print_function
 import sys
 import argparse
 import numpy as np
-sys.path.remove('/sonas-hs/lyon/hpc/home/hfang/.local/lib/python3.4/site-packages/statsmodels-0.6.1-py3.4-linux-x86_64.egg') # to be removed
+sys.path.insert(1, [i for i in sys.path if 'statsmodels' in i and '0.8.0' in i][0])
 import statsmodels
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
 import pandas as pd
+import numpy as np
 from patsy import dmatrices
 import pybedtools as pbt
 from statsmodels.base.model import GenericLikelihoodModel
+#from memory_profiler import profile
 
 
 class glmTE(object):
     ''' class to perform glm for TE estimation
     '''
-    def __init__(self, fn, unmap_fn):
-        self.fn = fn
-        self.df_all = pd.read_table(self.fn,  header=0)
-        self.df_col_names = list(self.df_all.columns.values)
-        self.bt_all = pbt.BedTool.from_dataframe(self.df_all)
-        self.unmap = pbt.BedTool(unmap_fn)
-        self.bt_map = self.bt_all.intersect(self.unmap, v=True)
-        self.df = self.bt_map.to_dataframe(names=self.df_col_names)
+    def __init__(self, fn, unMappable):
+        self.df = pd.read_table(fn,  header=0)
+        self.unMappable = pbt.BedTool(unMappable)
 
-    def filter(self):
+    def getLen(self):
+        tmp = self.df[["gene_name", "codon_idx"]]
+        self.geneLen = tmp.groupby('gene_name').max().reset_index()
+        self.geneLen.columns = ['gene_name', "gene_length"]
+        self.geneLen["gene_length"] = self.geneLen["gene_length"] - 8
+
+    def filterDf(self):
         ## get a summary of the starting df
         print ("[status]\tStarting number of observations:\t" + str(self.df.shape[0]), flush=True)
         print ("[status]\tNumber of variables:\t" + str(self.df.shape[1]-1), flush=True)
-        #inds = pd.isnull(self.df).any(1).nonzero()[0]
-        #print(inds)
-        #print(pd.isnull(self.df).any(1).nonzero()[0])
-        #print(self.df.isnull().values.any())
-
+        ## rolling mean of 2' structure pairing probabilities
+        tmp = self.df[["gene_name", "codon_idx", "pair_prob"]]
+        rollingAvg = tmp.groupby("gene_name").rolling(window=11, center=True).mean().reset_index(0, drop=True)
+        rollingAvg.columns = ["gene_name", "codon_idx", "avg_prob"]
+        self.df = pd.merge(self.df, rollingAvg, how='left', on = ["gene_name", 'codon_idx'])
+        self.df = self.df[["chrom", "asite_start", "asite_end", "gene_name", "codon_idx", "gene_strand", "codon", "TPM", "avg_prob", "ribosome_count"]]
+        ## filter out unmappable regions
+        colNames = list(self.df.columns.values)
+        bt = pbt.BedTool.from_dataframe(self.df)
+        btMapped = bt.intersect(self.unMappable, v=True)
+        self.df = btMapped.to_dataframe(names=colNames)
+        ## filter 5/3 utr codons
+        self.df = pd.merge(self.df, self.geneLen, how = "left", on = ["gene_name"])
+        self.df = self.df[(self.df.codon_idx <= self.df.gene_length) & (self.df.codon_idx >=0 )]
         ## remove missing values
         self.df = self.df.dropna()
-
-        ## group by gene names
-        grouped = self.df.groupby("gene_name")
-        #ribosome_count_sum = np.array(grouped.aggregate(np.sum).TPM)
-
+        ## remove genes that have too few codons remained (<10)
+        tmp = self.df.groupby('gene_name').size().reset_index(name="remained")
+        tmp["keep"] = np.where(tmp.remained>10, True, False)
+        tmp = tmp[(tmp.keep == True)][['gene_name']]
+        self.df = pd.merge(self.df, tmp, how = "inner", on = ["gene_name"])
         ## codons to exclude , start:'ATG', stop: TAG, TAA, TGA
-        self.df = self.df.loc[ (self.df.codon != 'ATG') & (self.df.codon != 'TAG') & (self.df.codon != 'TAA') &
-                               (self.df.codon != 'TGA') , :]
-
-        ## define TPM lower bound, fitler df, require TPM > 10, ribosome count > 100
-        TPM_lb = 10
-        self.df = self.df.loc[self.df.TPM >= TPM_lb, :]
-        num_genes = np.unique(self.df.gene_name).shape[0]
-        
+        self.df = self.df[((self.df.codon != 'ATG') & (self.df.codon != 'TAG') & (self.df.codon != 'TAA') & (self.df.codon != 'TGA'))]
+        ## define TPM lower bound, filter df, require TPM > 10, ribosome count > 100
+        tpmLB = 10
+        self.df = self.df[(self.df.TPM >= tpmLB)]
+        numGenes = np.unique(self.df.gene_name).shape[0]
         ## calculate log(TPM)
-        log_TPM = np.log(self.df['TPM'])
-        self.df = self.df.assign(log_TPM = log_TPM)
-
-        ## add 1 to ribosome_count, divide self.df.ribosome_count by TPM
+        logTPM = np.log(self.df['TPM'])
+        self.df['log_TPM'] = logTPM
+        #self.df = self.df.assign(log_TPM = logTPM)
+        ## add 1 to ribosome_count
         self.df.ribosome_count = self.df.ribosome_count + 1
         #self.df["norm_count"] = (self.df.ribosome_count ) / self.df.TPM
-
+        #self.df.to_csv(path_or_buf='filtered.txt', sep='\t', header=True, index=False)
         ## print status
-        print ("[status]\tTPM lower bound:\t" + str(TPM_lb), flush=True)
+        print ("[status]\tTPM lower bound:\t" + str(tpmLB), flush=True)
         print ("[status]\tNumber of observations after filtering:\t" + str(self.df.shape[0]), flush=True)
-        print ("[status]\tNumber of genes after filtering:\t" + str(num_genes), flush=True)
-        
+        print ("[status]\tNumber of genes after filtering:\t" + str(numGenes), flush=True)
+        ## group by gene names
+        # grouped = self.df.groupby("gene_name")
+        # ribosome_count_sum = np.array(grouped.aggregate(np.sum).TPM)
+
+    #@profile
     def nbGlm(self):
-        ## define model formula,
-        formula = 'ribosome_count ~ C(gene_name) + C(codon) + pair_prob'
+        ## define model formula
+        self.df = self.df[['ribosome_count', 'gene_name', 'codon', 'avg_prob', 'log_TPM']]
+        formula = 'ribosome_count ~ C(gene_name) + C(codon) + avg_prob'
         print("[status]\tFormula: " + str(formula), flush=True)
-        
+
         ## define model fitting options
-        sovler = "lbfgs" # "IRLS" # "lbfgs"
-        tolerence = 1e-8
-        num_iter = 100
+        sovler = "IRLS" # "lbfgs"
+        tolerence = 1e-4
+        numIter = 100
         print("[status]\tSolver: " + sovler, flush=True)
         print("[status]\tConvergence tolerance: " + str(tolerence), flush=True)
-        print("[status]\tMaxiter: " + str(num_iter), flush=True)
+        print("[status]\tMaxiter: " + str(numIter), flush=True)
         
         ## model fitting NegativeBinomial GLM
         print("[status]\tModel: smf.glm(formula, self.df, family=sm.families.NegativeBinomial(), offset=self.df['log_TPM']", flush=True)
         mod = smf.glm(formula, self.df, family=sm.families.NegativeBinomial(), offset=self.df['log_TPM'])
-        res = mod.fit(method=sovler, tol=tolerence, maxiter=num_iter)
+        res = mod.fit(method=sovler, tol=tolerence, maxiter=numIter)
 
         ## print model output
-        print ( res.summary() )
+        print (res.summary())
 
         ## alternative fit a gamma dist
         #formula = 'norm_count ~ C(gene_name) + C(codon)  + pair_prob '
         #print("[status]\tFormula: " + str(formula), flush=True)
         #mod = smf.glm(formula, self.df, family=sm.families.Gamma(link=sm.families.links.log))
 
+    @profile
     def genericGLM(self):
-        y, X = dmatrices('ribosome_count ~ C(gene_name) + C(codon) + pair_prob', self.df)
-        mod = NBin(y, X)
-        res = mod.fit('lbfgs')
-        print(res)
+        y, X = dmatrices('ribosome_count ~ C(gene_name) + C(codon) + avg_prob', self.df)
+        print(y)
+        print("\n")
+        print(X)
+
+        #mod = NBin(y, X)
+        #res = mod.fit('lbfgs')
+        #print(res)
 
 class NBin(GenericLikelihoodModel):
     def __init__(self, endog, exog, **kwds):
@@ -124,7 +143,6 @@ class NBin(GenericLikelihoodModel):
         return super(NBin, self).fit(start_params=start_params,
                                      maxiter=maxiter, maxfun=maxfun,
                                      **kwds)
-
 
 
 ## the main process
@@ -151,12 +169,13 @@ if __name__ == '__main__':
 
         ## start model fitting
         print("[execute]\tStart the modelling of TE", flush=True)
-        model = glmTE(df_fn, unmap_fn)
+        mod = glmTE(df_fn, unmap_fn)
         print("[execute]\tFilter the df", flush=True)
-        model.filter()
+        mod.getLen()
+        mod.filterDf()
         print("[execute]\tFitting the GLM", flush=True)
-        model.nbGlm()
-        #model.genericGLM()
+        #mod.nbGlm()
+        mod.genericGLM()
     else:
         print ("[error]\tmissing argument")
         parser.print_usage()
