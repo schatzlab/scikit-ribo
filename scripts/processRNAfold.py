@@ -111,7 +111,7 @@ class rnafold(object):
         for file in os.listdir(self.folder):
             if file.endswith("dp.ps"):
                 fileNames.append(file)
-        pool = multiprocessing.Pool(4)
+        pool = multiprocessing.Pool(16)
         pool.map(self.loadDpps, fileNames)
         print("[status]\tFinished loading rnafold results for all.", flush=True)
 
