@@ -57,41 +57,46 @@ class glmTE(object):
         self.df = btMapped.to_dataframe(names=colNames)
         ## filter 5/3 utr codons
         self.df = pd.merge(self.df, self.geneLen, how = "left", on = ["gene_name"])
-        self.df = self.df[(self.df.codon_idx <= self.df.gene_length) & (self.df.codon_idx >=0 )]
-        ## remove missing values
-        self.df = self.df.dropna()
+        self.df = self.df[(self.df.codon_idx <= self.df.gene_length) & (self.df.codon_idx >=1)]
         ## remove genes that have too few codons remained (<10)
         tmp = self.df.groupby('gene_name').size().reset_index(name="remained")
         tmp["keep"] = np.where(tmp.remained>10, True, False)
         tmp = tmp[(tmp.keep == True)][['gene_name']]
         self.df = pd.merge(self.df, tmp, how = "inner", on = ["gene_name"])
-        ## codons to exclude , start:'ATG', stop: TAG, TAA, TGA
-        self.df = self.df[((self.df.codon != 'ATG') & (self.df.codon != 'TAG') & (self.df.codon != 'TAA') & (self.df.codon != 'TGA'))]
+        ## codons to exclude , stop: TAG, TAA, TGA
+        self.df = self.df[((self.df.codon != 'TAG') & (self.df.codon != 'TAA') & (self.df.codon != 'TGA'))]
         ## define TPM lower bound, filter df, require TPM > 10, ribosome count > 100
         tpmLB = 10
         self.df = self.df[(self.df.TPM >= tpmLB)]
         numGenes = np.unique(self.df.gene_name).shape[0]
+        ## group by gene names
+        # grouped = self.df.groupby("gene_name")
+        # ribosome_count_sum = np.array(grouped.aggregate(np.sum).TPM)
         ## calculate log(TPM)
         logTPM = np.log(self.df['TPM'])
-        self.df['log_TPM'] = logTPM
-        #self.df = self.df.assign(log_TPM = logTPM)
-        ## add 1 to ribosome_count
-        self.df.ribosome_count = self.df.ribosome_count + 1
-        #self.df["norm_count"] = (self.df.ribosome_count ) / self.df.TPM
-        #self.df.to_csv(path_or_buf='filtered.txt', sep='\t', header=True, index=False)
+        self.df['logTPM'] = logTPM
+        tmp = self.df[["gene_name", "logTPM"]]
+        tmp = tmp.drop_duplicates()
+        tmp["logTPM_scaled"] = (tmp.logTPM - np.mean(tmp.logTPM)) / np.std(tmp.logTPM)
+        tmp = tmp[["gene_name", "logTPM_scaled"]]
+        self.df = pd.merge(self.df, tmp, how='left', on=["gene_name"])
+        ## variable scaling
+        self.df["avg_prob_scaled"] = (self.df.avg_prob - np.mean(self.df.avg_prob)) / np.std(self.df.avg_prob)
+        self.df = self.df[["chrom", "asite_start", "asite_end", "gene_name", "codon_idx", "gene_strand", "codon", "logTPM_scaled", "avg_prob_scaled", "ribosome_count"]]
+        ## remove missing values
+        self.df = self.df.dropna()
+        self.df.to_csv(path_or_buf='filtered.txt', sep='\t', header=True, index=False)
         ## print status
         print ("[status]\tTPM lower bound:\t" + str(tpmLB), flush=True)
         print ("[status]\tNumber of observations after filtering:\t" + str(self.df.shape[0]), flush=True)
         print ("[status]\tNumber of genes after filtering:\t" + str(numGenes), flush=True)
-        ## group by gene names
-        # grouped = self.df.groupby("gene_name")
-        # ribosome_count_sum = np.array(grouped.aggregate(np.sum).TPM)
+
 
     #@profile
     def nbGlm(self):
         ## define model formula
-        self.df = self.df[['ribosome_count', 'gene_name', 'codon', 'avg_prob', 'log_TPM']]
-        formula = 'ribosome_count ~ C(gene_name) + C(codon) + avg_prob'
+        self.df = self.df[['ribosome_count', 'gene_name', 'codon', 'avg_prob_scaled', 'logTPM_scaled']]
+        formula = 'ribosome_count ~ C(gene_name) + C(codon) + avg_prob_scaled'
         print("[status]\tFormula: " + str(formula), flush=True)
 
         ## define model fitting options
@@ -103,8 +108,8 @@ class glmTE(object):
         print("[status]\tMaxiter: " + str(numIter), flush=True)
         
         ## model fitting NegativeBinomial GLM
-        print("[status]\tModel: smf.glm(formula, self.df, family=sm.families.NegativeBinomial(), offset=self.df['log_TPM']", flush=True)
-        mod = smf.glm(formula, self.df, family=sm.families.NegativeBinomial(), offset=self.df['log_TPM'])
+        print("[status]\tModel: smf.glm(formula, self.df, family=sm.families.NegativeBinomial(), offset=self.df['logTPM_scaled']", flush=True)
+        mod = smf.glm(formula, self.df, family=sm.families.NegativeBinomial(), offset=self.df['logTPM_scaled'])
         res = mod.fit(method=sovler, tol=tolerence, maxiter=numIter)
 
         ## print model output
@@ -115,7 +120,7 @@ class glmTE(object):
         #print("[status]\tFormula: " + str(formula), flush=True)
         #mod = smf.glm(formula, self.df, family=sm.families.Gamma(link=sm.families.links.log))
 
-    @profile
+    #@profile
     def genericGLM(self):
         y, X = dmatrices('ribosome_count ~ C(gene_name) + C(codon) + avg_prob', self.df)
         print(y)
@@ -170,12 +175,12 @@ if __name__ == '__main__':
         ## start model fitting
         print("[execute]\tStart the modelling of TE", flush=True)
         mod = glmTE(df_fn, unmap_fn)
-        print("[execute]\tFilter the df", flush=True)
+        print("[execute]\tCalculate lengths of chromosomes and filter the df", flush=True)
         mod.getLen()
         mod.filterDf()
         print("[execute]\tFitting the GLM", flush=True)
-        #mod.nbGlm()
-        mod.genericGLM()
+        mod.nbGlm()
+        #mod.genericGLM()
     else:
         print ("[error]\tmissing argument")
         parser.print_usage()
