@@ -41,7 +41,7 @@ class figures(object):
             return
         ## read the df and construct numpy array
         # geneName = self.geneName
-        riboCnt = np.array(self.riboDf[self.riboDf["gene_name"] == geneName]["ribosome_count"]) # rm [30:]
+        riboCnt = np.array(self.riboDf[self.riboDf["gene_name"] == geneName]["ribosome_count"])
         pairProb = np.array(self.riboDf[self.riboDf["gene_name"] == geneName]["pair_prob"])
         ## reverse the array if the strand is negative
         if self.riboDf.loc[self.riboDf["gene_name"] == geneName]["gene_strand"].values[0] == "-":
@@ -49,18 +49,18 @@ class figures(object):
             pairProb = pairProb[::-1]
         ## sliding window average of the pair probability
         window = np.ones(5).astype(float)/5.0
-        slidingWindowAvg = np.convolve(pairProb, window,mode="valid")
+        slidingWindowAvg = np.convolve(pairProb, window, mode="valid")
 
         ## plot the ribosome count along a transcript
         f, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
         f.suptitle(geneName)
         ax1.plot(riboCnt, sns.xkcd_rgb["denim blue"], lw = 2)
         #print( [item.get_text() for item in ax1.get_xticklabels()])
-        #labels = range(-30, riboCnt.size+1)
-        # [int(float(item.get_text()))-30 for item in ax1.get_xticklabels()]
+        #labels = range(-24, riboCnt.size+1)
+        # [int(float(item.get_text()))-24 for item in ax1.get_xticklabels()]
         #ax1.set_xticklabels(labels)
-        startCodonPos, stopCodonPos = 10, riboCnt.size-10
-        ax1.axvline(startCodonPos, color="#999999",dashes=[3,2],zorder=-1) # change to 10
+        startCodonPos, stopCodonPos = 8, riboCnt.size-8
+        ax1.axvline(startCodonPos, color="#999999",dashes=[3,2],zorder=-1)
         ax1.axvline(stopCodonPos ,color="#999999",dashes=[3,2],zorder=-1)
         ax1.set_ylabel("Ribosome counts")
         ax2 = plt.subplot(2, 1, 2)
@@ -70,7 +70,7 @@ class figures(object):
         ax2.set_ylim([0,1])
         ax2.set_ylabel("Pairing probability")
         ax2.set_xlabel("Position in transcript (5' -> 3')")
-        ax2.axvline(startCodonPos, color="#999999",dashes=[3,2],zorder=-1) # change to 30
+        ax2.axvline(startCodonPos, color="#999999",dashes=[3,2],zorder=-1)
         ax2.axvline(stopCodonPos,color="#999999",dashes=[3,2],zorder=-1)
         ax2.legend()
         plt.gcf()
