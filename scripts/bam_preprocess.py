@@ -29,12 +29,13 @@ class processAln(object):
     '''extracting alignment based on MAPQ and read length, prepare training/testing data
     '''
 
-    def __init__(self, inBam, mapq, outBam, minRL, maxRL, startCodons, orf, posRanges):
+    def __init__(self, inBam, mapq, outBam, minRL, maxRL, startCodons, orf, posRanges, RelE):
         self.inBam = inBam
         self.mapq = mapq
         self.outBam = outBam
         self.minRL = minRL
         self.maxRL = maxRL
+        self.RelE = RelE
         self.reads = []
         self.startCodons = pbt.BedTool(startCodons).filter(lambda x: x.chrom != 'chrM')
         self.startCodons = self.startCodons.sort()
@@ -125,9 +126,14 @@ class processAln(object):
                                                       'blockStarts', 'sc_chrom', 'sc_start', 'sc_end', 'gene_name',
                                                       'sc_score', 'gene_strand'])
         ### a-site
-        trainingDf['asite'] = np.where(trainingDf['gene_strand'] == '+',
-                                       trainingDf['sc_start'] - trainingDf['start'] + 3,
-                                       trainingDf['end'] - trainingDf['sc_end'] + 3 )
+        if not self.RelE:
+            trainingDf['asite'] = np.where(trainingDf['gene_strand'] == '+',
+                                           trainingDf['sc_start'] - trainingDf['start'] + 3,
+                                           trainingDf['end'] - trainingDf['sc_end'] + 3 )
+        else:
+            trainingDf['asite'] = np.where(trainingDf['gene_strand'] == '+',
+                                           trainingDf['end'] - trainingDf['sc_start'] - 3,
+                                           trainingDf['sc_end'] - trainingDf['start'] - 3 )
         ## phasing 5'
         trainingA = pd.merge(trainingDf, self.posOffsets, left_on=["chrom", "start"], right_on=["chrom","pos"])
         trainingB = pd.merge(trainingDf, self.negOffsets, left_on=["chrom", "end"], right_on=["chrom","pos"])
@@ -139,8 +145,11 @@ class processAln(object):
         trainingDf = pd.concat([trainingA, trainingB])
         trainingDf.rename(columns={'offset':'three_offset'}, inplace=True)
         ## filter a read by whether it has a-site that satisfies [9,18]
-        trainingDf = trainingDf[((trainingDf['asite'] >= 9) & (trainingDf['asite'] <= 18))]
-        trainingDf = trainingDf[(trainingDf['asite'] >= trainingDf['read_length'] / 2 - 1)]
+        if not self.RelE:
+            trainingDf = trainingDf[((trainingDf['asite'] >= 9) & (trainingDf['asite'] <= 18))]
+            trainingDf = trainingDf[(trainingDf['asite'] >= trainingDf['read_length'] / 2 - 1)]
+        else:
+            trainingDf = trainingDf[((trainingDf['asite'] >= 1) & (trainingDf['asite'] <= 8))]
         ## slice the dataframe to the variables needed for training data, removed "start_nt", "end_nt"
         trainingDf = trainingDf[["asite", "read_length", "five_offset", "three_offset", "gene_strand"]]
         trainingDf.to_csv(path_or_buf=self.outBam + '.training.txt', sep='\t', header=True, index=False)
@@ -206,6 +215,7 @@ if __name__ == '__main__':
     parser.add_argument("-q", help="minimum mapq allowed, Default: 20", default=20, type=int)
     parser.add_argument("-l", help="shortest read length allowed, Default: 20", default=20, type=int)
     parser.add_argument("-u", help="longest read length allowed, Default: 35", default=35, type=int)
+    parser.add_argument("-e", help="whether the sample involved RelE, Default: F", default='F', type=str)
     parser.add_argument("-o", help="output filtered bam file")
 
     ## check if there is any argument
@@ -221,6 +231,7 @@ if __name__ == '__main__':
         inBam = args.i
         mapq = args.q
         outBam = args.o
+        RelE = False if args.e == 'F' else True
         minReadLen = args.l
         maxReadLen = args.u
         startCodons = args.p + ".sort.start.bed"
@@ -237,7 +248,7 @@ if __name__ == '__main__':
         ## filter alignment
         print("[execute]\tkeep only reads with length [" + str(minReadLen) + "," + str(maxReadLen) + "] and mapq = " +
               str(mapq), flush=True)
-        aln = processAln(inBam, mapq, outBam, minReadLen, maxReadLen, startCodons, orf, posRanges)
+        aln = processAln(inBam, mapq, outBam, minReadLen, maxReadLen, startCodons, orf, posRanges, RelE)
         print("[execute]\tfilter out overlapping regions", flush=True)
         aln.filterRegion()
         print("[execute]\timport the position ranges", flush=True)

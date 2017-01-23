@@ -36,36 +36,41 @@ from sklearn.feature_selection import SelectFromModel, RFECV
 class visualizeAsite(object):
     ''' define a class for plotting a-site location distribution
     '''
-    def __init__(self, asiteFn):
+    def __init__(self, asiteFn, RelE):
         self.asiteFn = asiteFn
         self.asiteDf = pd.read_table(asiteFn,  header=0)
+        self.RelE = RelE
 
     def plot(self):
         sns.set(font_scale=2)
         g0 = sns.FacetGrid(self.asiteDf, row="five_offset", col="read_length", margin_titles=True,
-                           col_order= list(range(20,36)),
-                           row_order= list(range(3)))
-        bins = np.linspace(12, 21, 10)
+                           col_order= list(range(20,36)), row_order= list(range(3)))
+        bins = np.linspace(12, 21, 10) if not self.RelE else np.linspace(1, 10, 10)
         g0.map(plt.hist, "asite", color="steelblue", bins=bins, lw=0,normed=True)
-        g0.set(xticks=[12,15,18,21])
+        if not self.RelE:
+            g0.set(xticks=[12, 15, 18, 21])
+        else:
+            g0.set(xticks=[1, 4, 7, 10])
         plt.gcf()
         plt.savefig(self.asiteFn +".asite_five_offset.pdf" )
         plt.clf()
 
         g1 = sns.FacetGrid(self.asiteDf, row="three_offset", col="read_length", margin_titles=True,
-                           col_order= list(range(20,36)),
-                           row_order= list(range(3)))
-        bins = np.linspace(12, 21, 10)
+                           col_order= list(range(20,36)), row_order= list(range(3)))
         g1.map(plt.hist, "asite", color="steelblue", bins=bins, lw=0,normed=True)
-        g1.set(xticks=[12,15,18,21])
+        if not self.RelE:
+            g1.set(xticks=[12, 15, 18, 21])
+        else:
+            g1.set(xticks=[1, 4, 7, 10])
         plt.gcf()
         plt.savefig(self.asiteFn +".asite_three_offset.pdf" )
         plt.clf()
 
+
 class trainModel(object):
     ''' define a class for model training - a-site prediction
     '''
-    def __init__(self, object, testingFn, cdsIdxFn, classifier):
+    def __init__(self, object, testingFn, cdsIdxFn, classifier, RelE):
         self.traningDf = object.asiteDf
         self.asiteFn = object.asiteFn
         self.colNames = list(self.traningDf.columns.values)
@@ -78,6 +83,7 @@ class trainModel(object):
         self.cdsIdxDf = pd.read_table(self.cdsIdxFn, header=0)
         self.featureNames =(pd.get_dummies(self.traningDf[self.colNames]).columns.values)
         self.classifier = classifier
+        self.RelE = RelE
 
     def rfFit(self):
         ## feature selection
@@ -148,7 +154,8 @@ class trainModel(object):
         # shuffle and split training and test sets
         clf = self.reducedClf if self.classifier == "rf" else self.clf
         self.OvrClf = OneVsRestClassifier(clf)
-        self.y = label_binarize(self.y, classes=[12,13,14,15,16,17,18])
+        classes = list(range(9,19)) if not self.RelE else list(range(1,9))
+        self.y = label_binarize(self.y, classes=classes)
         nClasses = self.y.shape[1]
         X_train, X_test, y_train, y_test = train_test_split(self.X, self.y, test_size=.5, random_state=0)
         if self.classifier == "rf":
@@ -170,8 +177,9 @@ class trainModel(object):
         plt.plot(fpr["micro"], tpr["micro"],'--', linewidth=3, label='micro-average (area = {0:0.2f})'
                  ''.format(roc_auc["micro"]))
         for i in range(nClasses):
+            pos = classes[i]
             plt.plot(fpr[i], tpr[i], label='A-site @ {0} (area = {1:0.2f})'
-                     ''.format(i+12, roc_auc[i]))
+                     ''.format(pos, roc_auc[i]))
         #
         plt.plot([0, 1], [0, 1], 'k--')
         plt.xlim([0.0, 1.0])
@@ -185,15 +193,26 @@ class trainModel(object):
 
     def recoverAsite(self):
         ## adjust by the a-site location and calculate the a-site location in nt space, -1 is the missing value
-        self.testingDf['asite_start'] = np.where(self.testingDf['gene_strand'] == '+',
-                                                 (self.testingDf['start'] + self.testingDf['asite']),
-                                                 (-1) ).astype(int)
-        self.testingDf['asite_end'] = np.where(self.testingDf['gene_strand'] == '+',
-                                               (self.testingDf['asite_start'] + 3),
-                                               (self.testingDf['end'] - self.testingDf['asite']) ).astype(int)
-        self.testingDf['asite_start'] = np.where(self.testingDf['gene_strand'] == '-',
-                                                 (self.testingDf['asite_end'] - 3),
-                                                 (self.testingDf['asite_start']) ).astype(int)
+        if not self.RelE:
+            self.testingDf['asite_start'] = np.where(self.testingDf['gene_strand'] == '+',
+                                                     (self.testingDf['start'] + self.testingDf['asite']),
+                                                     (-1) ).astype(int)
+            self.testingDf['asite_end'] = np.where(self.testingDf['gene_strand'] == '+',
+                                                   (self.testingDf['asite_start'] + 3),
+                                                   (self.testingDf['end'] - self.testingDf['asite']) ).astype(int)
+            self.testingDf['asite_start'] = np.where(self.testingDf['gene_strand'] == '-',
+                                                     (self.testingDf['asite_end'] - 3),
+                                                     (self.testingDf['asite_start']) ).astype(int)
+        else:
+            self.testingDf['asite_start'] = np.where(self.testingDf['gene_strand'] == '+',
+                                                     (self.testingDf['end'] - self.testingDf['asite']),
+                                                     (-1) ).astype(int)
+            self.testingDf['asite_end'] = np.where(self.testingDf['gene_strand'] == '+',
+                                                   (self.testingDf['asite_start'] + 3),
+                                                   (self.testingDf['start'] + self.testingDf['asite']) ).astype(int)
+            self.testingDf['asite_start'] = np.where(self.testingDf['gene_strand'] == '-',
+                                                     (self.testingDf['asite_end'] - 3),
+                                                     (self.testingDf['asite_start']) ).astype(int)
         ## use to group by command to retrieve ribosome coverage
         coverageDf = self.testingDf.groupby(["chrom", "asite_start", "asite_end"])
         coverageDf = coverageDf.size().reset_index(name="ribosome_count")
@@ -215,6 +234,7 @@ if __name__ == '__main__':
     parser.add_argument("-t", help="input testing data for the entire CDS region, required")
     parser.add_argument("-d", help="input index data-frame for the entire CDS region, required")
     parser.add_argument("-c", help="classifier to use, random forest (rf) or svm, optional, default: rf", default="rf")
+    parser.add_argument("-e", help="whether the sample involved RelE, Default: F", default='F', type=str)
     parser.add_argument("-o", help="output path, required")
 
     ## check if there is any argument
@@ -232,16 +252,17 @@ if __name__ == '__main__':
         cds_idx = args.d
         classifier = args.c
         output = args.o
+        RelE = False if args.e == 'F' else True
 
         cmd = "mkdir -p " + output
         os.system(cmd)
 
         print("[execute]\tplotting the a-site location distribution from " + str(asite_fn), flush=True)
-        asite_loc = visualizeAsite(asite_fn)
+        asite_loc = visualizeAsite(asite_fn, RelE)
         asite_loc.plot()
 
         print("[execute]\tstart the process of a-site prediction", flush=True)
-        model = trainModel(asite_loc, cds_fn, cds_idx, classifier)
+        model = trainModel(asite_loc, cds_fn, cds_idx, classifier, RelE)
 
         if classifier == "rf":
             print("[execute]\tperform model training and cross validation on the training data", flush=True)
