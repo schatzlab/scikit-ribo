@@ -93,13 +93,13 @@ class processAln(object):
                 gene, chr, strand, ranges = line.rstrip("\n").split("\t")
                 boxes = [(int(i[0]), int(i[1]), int(i[2])) for i in [j.split(",") for j in ranges.split("|") ]]
                 if strand == "+":
-                    self.posOffsets.extend([[gene, pos, (abs(pos-(box[0]-15)) + box[2])%3] for box in boxes for pos in range(box[0]-15, box[1]+12)])
+                    self.posOffsets.extend([[chr, pos, (abs(pos-(box[0]-15)) + box[2])%3] for box in boxes for pos in range(box[0]-15, box[1]+12)])
                 else:
                     boxes = boxes[::-1] # flip the order
-                    self.negOffsets.extend([[gene, pos, (abs(pos-(box[1]+15)) + box[2])%3] for box in boxes for pos in range(box[1]+15, box[0]-12, -1)])
-
-        self.posOffsets = pd.DataFrame(self.posOffsets, columns=["gene_name", "pos", "offset"]).drop_duplicates(subset=["gene_name", "pos"])
-        self.negOffsets = pd.DataFrame(self.negOffsets, columns=["gene_name", "pos", "offset"]).drop_duplicates(subset=["gene_name", "pos"])
+                    self.negOffsets.extend([[chr, pos, (abs(pos-(box[1]+15)) + box[2])%3] for box in boxes for pos in range(box[1]+15, box[0]-12, -1)])
+        ## convert to dataframe
+        self.posOffsets = pd.DataFrame(self.posOffsets, columns=["chrom", "pos", "offset"]).drop_duplicates(subset=["chrom", "pos"])
+        self.negOffsets = pd.DataFrame(self.negOffsets, columns=["chrom", "pos", "offset"]).drop_duplicates(subset=["chrom", "pos"])
 
         # self.offsets.to_csv(path_or_buf='offsets.testing.txt', sep='\t', header=True, index=False)
         ## save for dask
@@ -129,13 +129,13 @@ class processAln(object):
                                        trainingDf['sc_start'] - trainingDf['start'] + 3,
                                        trainingDf['end'] - trainingDf['sc_end'] + 3 )
         ## phasing 5'
-        trainingA = pd.merge(trainingDf, self.posOffsets, left_on=["gene_name", "start"], right_on=["gene_name","pos"])
-        trainingB = pd.merge(trainingDf, self.negOffsets, left_on=["gene_name", "end"], right_on=["gene_name","pos"])
+        trainingA = pd.merge(trainingDf, self.posOffsets, left_on=["chrom", "start"], right_on=["chrom","pos"])
+        trainingB = pd.merge(trainingDf, self.negOffsets, left_on=["chrom", "end"], right_on=["chrom","pos"])
         trainingDf = pd.concat([trainingA, trainingB])
         trainingDf.rename(columns={'offset':'five_offset'}, inplace=True)
         ## phasing 3'
-        trainingA = pd.merge(trainingDf, self.posOffsets, left_on=["gene_name", "end"], right_on=["gene_name","pos"])
-        trainingB = pd.merge(trainingDf, self.negOffsets, left_on=["gene_name", "start"], right_on=["gene_name","pos"])
+        trainingA = pd.merge(trainingDf, self.posOffsets, left_on=["chrom", "end"], right_on=["chrom","pos"])
+        trainingB = pd.merge(trainingDf, self.negOffsets, left_on=["chrom", "start"], right_on=["chrom","pos"])
         trainingDf = pd.concat([trainingA, trainingB])
         trainingDf.rename(columns={'offset':'three_offset'}, inplace=True)
         ## filter a read by whether it has a-site that satisfies [9,18]
@@ -172,13 +172,13 @@ class processAln(object):
                                              dtype={'blockSizes':'object','blockStarts':'object',
                                                     'gene_blockSizes':'object','gene_blockStarts':'object'})
         ## phasing 5'
-        testingA = pd.merge(testingDf, self.posOffsets, left_on=["gene_name", "start"], right_on=["gene_name","pos"])
-        testingB = pd.merge(testingDf, self.negOffsets, left_on=["gene_name", "end"], right_on=["gene_name","pos"])
+        testingA = pd.merge(testingDf, self.posOffsets, left_on=["chrom", "start"], right_on=["chrom","pos"])
+        testingB = pd.merge(testingDf, self.negOffsets, left_on=["chrom", "end"], right_on=["chrom","pos"])
         testingDf = pd.concat([testingA, testingB])
         testingDf.rename(columns={'offset':'five_offset'}, inplace=True)
         ## phasing 3'
-        testingA = pd.merge(testingDf, self.posOffsets, left_on=["gene_name", "end"], right_on=["gene_name","pos"])
-        testingB = pd.merge(testingDf, self.negOffsets, left_on=["gene_name", "start"], right_on=["gene_name","pos"])
+        testingA = pd.merge(testingDf, self.posOffsets, left_on=["chrom", "end"], right_on=["chrom","pos"])
+        testingB = pd.merge(testingDf, self.negOffsets, left_on=["chrom", "start"], right_on=["chrom","pos"])
         testingDf = pd.concat([testingA, testingB])
         testingDf.rename(columns={'offset':'three_offset'}, inplace=True)
         ## slice the dataframe to the variables needed for training data
