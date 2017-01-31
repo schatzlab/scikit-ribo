@@ -47,7 +47,7 @@ class gtf2Bed(object):
         ## create bedtool from gtf
         self.bedtool = pbt.BedTool(gtfDedup)
         ## create a db from the gtf file
-        self.db = gffutils.create_db(gtfDedup, ":memory:", force=True)
+        self.db = gffutils.create_db(gtfDedup, ":memory:", force=True, verbose=False)
         ## retrieve a list of gene names with type "CDS" from db
         for gene in self.db.features_of_type("CDS", order_by=("seqid","start")):
             self.geneNames.append(gene['gene_id'][0])
@@ -227,7 +227,7 @@ if __name__ == '__main__':
         args = parser.parse_args()
     ## process the file if the input files exist
     if (args.g!=None) & (args.r!=None) & (args.o!=None):
-        sys.stderr.write("[status]\tReading the input file: " + args.g)
+        sys.stderr.write("[status]\tReading the input file: " + args.g + "\n")
         input_gtf = args.g
         input_ref = args.r
         output = args.o
@@ -235,21 +235,21 @@ if __name__ == '__main__':
         cmd = 'mkdir -p ' + output
         os.system(cmd)
         ## execute
-        sys.stderr.write("[execute]\tStarting the pre-processing module")
+        sys.stderr.write("[execute]\tStarting the pre-processing module" + "\n")
         gtf_hdl = gtf2Bed(input_gtf, input_ref, output)
-        sys.stderr.write("[execute]\tLoading the the gtf file in to sql db")
+        sys.stderr.write("[execute]\tLoading the the gtf file in to sql db" + "\n")
         gtf_hdl.convertGtf()
-        sys.stderr.write("[execute]\tCalculating the length of each chromosome")
+        sys.stderr.write("[execute]\tCalculating the length of each chromosome" + "\n")
         gtf_hdl.getChrLen()
-        sys.stderr.write("[execute]\tExtracting the start codons' positions from the gtf db")
+        sys.stderr.write("[execute]\tExtracting the start codons' positions from the gtf db" + "\n")
         gtf_hdl.getStartCodon()
-        sys.stderr.write("[execute]\tExtracting the sequences for each gene")
+        sys.stderr.write("[execute]\tExtracting the sequences for each gene" + "\n")
         gtf_hdl.getSeq()
-        sys.stderr.write("[execute]\tBuilding the index for each position at the codon level")
+        sys.stderr.write("[execute]\tBuilding the index for each position at the codon level" + "\n")
         gtf_hdl.getCodons()
-        sys.stderr.write("[execute]\tCreating the codon table for the coding region")
+        sys.stderr.write("[execute]\tCreating the codon table for the coding region" + "\n")
         gtf_hdl.createCodonTable()
-        sys.stderr.write("[status]\tGtf pre-processing module finished.")
+        sys.stderr.write("[status]\tGtf pre-processing module finished" + "\n")
     else:
-        sys.stderr.write("[error]\tmissing argument")
+        sys.stderr.write("[error]\tmissing argument" + "\n")
         parser.print_usage() 

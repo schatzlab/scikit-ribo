@@ -43,7 +43,7 @@ class visualizeAsite(object):
     def plot(self):
         self.asiteDf = pd.read_table(self.asiteFn,  header=0)
         sns.set(font_scale=2)
-        g0 = sns.FacetGrid(self.asiteDf, row="5_offset", col="read_length", margin_titles=True,
+        g0 = sns.FacetGrid(self.asiteDf, row="five_offset", col="read_length", margin_titles=True,
                            col_order= list(range(20,36)), row_order= list(range(3)))
         bins = np.linspace(12, 21, 10) if not self.RelE else np.linspace(1, 10, 10)
         g0.map(plt.hist, "asite", color="steelblue", bins=bins, lw=0,normed=True)
@@ -54,7 +54,7 @@ class visualizeAsite(object):
         plt.gcf()
         plt.savefig(self.asiteFn +".asite_five_offset.pdf" )
         plt.clf()
-        g1 = sns.FacetGrid(self.asiteDf, row="3_offset", col="read_length", margin_titles=True,
+        g1 = sns.FacetGrid(self.asiteDf, row="three_offset", col="read_length", margin_titles=True,
                            col_order= list(range(20,36)), row_order= list(range(3)))
         g1.map(plt.hist, "asite", color="steelblue", bins=bins, lw=0,normed=True)
         if not self.RelE:
@@ -231,7 +231,7 @@ if __name__ == '__main__':
         args = parser.parse_args()
     ## process the file if the input files exist
     if (args.i != None and args.t != None):
-        sys.stderr.write("[status]\tprocessing the input file: " + args.i)
+        sys.stderr.write("[status]\tprocessing the input file: " + args.i + "\n")
         asite_fn = args.i
         cds_fn = args.t
         cds_idx = args.d
@@ -240,29 +240,29 @@ if __name__ == '__main__':
         RelE = False if args.e == 'F' else True
         cmd = "mkdir -p " + output
         os.system(cmd)
-        sys.stderr.write("[execute]\tplotting the a-site location distribution from " + str(asite_fn))
+        sys.stderr.write("[execute]\tplotting the a-site location distribution from " + str(asite_fn) + "\n")
         asite_loc = visualizeAsite(asite_fn, RelE)
         asite_loc.plot()
-        sys.stderr.write("[execute]\tstart the process of a-site prediction")
+        sys.stderr.write("[execute]\tstart the process of a-site prediction" + "\n")
         model = trainModel(asite_loc, cds_fn, cds_idx, classifier, RelE)
         if classifier == "rf":
-            sys.stderr.write("[execute]\tperform model training and cross validation on the training data")
+            sys.stderr.write("[execute]\tperform model training and cross validation on the training data" + "\n")
             model.rfFit()
-            sys.stderr.write("[execute]\tplotting the bar plot of the feature importance")
+            sys.stderr.write("[execute]\tplotting the bar plot of the feature importance" + "\n")
             model.rfImportance()
-            sys.stderr.write("[execute]\tplot roc curve based on cross validation")
+            sys.stderr.write("[execute]\tplot roc curve based on cross validation" + "\n")
             model.rocCurve()
-            sys.stderr.write("[execute]\tpredicting the a-site from the testing data")
+            sys.stderr.write("[execute]\tpredicting the a-site from the testing data" + "\n")
             model.rfPredict()
-            sys.stderr.write("[execute]\tlocalize the a-site codon and create coverage df")
+            sys.stderr.write("[execute]\tlocalize the a-site codon and create coverage df" + "\n")
             model.recoverAsite()
         elif classifier == "svm":
-            sys.stderr.write("[execute]\tperform SVM classifier training")
+            sys.stderr.write("[execute]\tperform SVM classifier training" + "\n")
             model.svmFit()
-            sys.stderr.write("[execute]\tplot roc curve based on cross validation")
+            sys.stderr.write("[execute]\tplot roc curve based on cross validation" + "\n")
             model.rocCurve()
         ## end
-        sys.stderr.write("[status]\tA-site module finished.")
+        sys.stderr.write("[status]\tA-site module finished" + "\n")
     else:
-        sys.stderr.write("[error]\tmissing argument")
+        sys.stderr.write("[error]\tmissing argument" + "\n")
         parser.print_usage()

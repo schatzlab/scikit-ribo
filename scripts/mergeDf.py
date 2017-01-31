@@ -60,7 +60,7 @@ class mergeDf(object):
             self.tpm.columns = ["gene_name", "TPM"]
         else:
             exit("Check file format, only support Salmon or Kallisto")
-        sys.stderr.write("[status]\tTPM input is from" + str(tool))
+        sys.stderr.write("[status]\tTPM input: " + str(tool) + "\n")
 
     def mergeDf(self):
         # import codon df
@@ -91,7 +91,7 @@ if __name__ == '__main__':
         args = parser.parse_args()
     ## process the file if the input files exist
     if (args.f != None) & (args.s != None) & (args.t != None) & (args.o != None):
-        sys.stderr.write("[status]\tReading the input file: " + args.f)
+        sys.stderr.write("[status]\tReading the input file: " + args.f + "\n")
         fn = args.f
         pairprob = args.s
         tpm = args.t
@@ -100,16 +100,16 @@ if __name__ == '__main__':
         cmd = 'mkdir -p ' + output
         os.system(cmd)
         ## execute
-        sys.stderr.write("[execute]\tStarting the pre-processing module")
+        sys.stderr.write("[execute]\tStarting the pre-processing module" + "\n")
         dat = mergeDf(fn, pairprob, tpm, output)
-        sys.stderr.write("[execute]\tTransforming the dataframe of RNA 2' structure pairing probabilities")
+        sys.stderr.write("[execute]\tTransforming the dataframe of RNA 2' structure pairing probabilities" + "\n")
         dat.transformPairProb()
-        sys.stderr.write("[execute]\tLoading tpm")
+        sys.stderr.write("[execute]\tLoading tpm" + "\n")
         dat.loadTpm()
-        sys.stderr.write("[execute]\tMerging all the df together")
+        sys.stderr.write("[execute]\tMerging all the df together" + "\n")
         dat.mergeDf()
         ## finish
-        sys.stderr.write("[status]\tData merging module finished.")
+        sys.stderr.write("[status]\tData merging module finished" + "\n")
     else:
-        sys.stderr.write("[error]\tmissing argument")
+        sys.stderr.write("[error]\tmissing argument" + "\n")
         parser.print_usage()

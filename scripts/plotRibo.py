@@ -39,7 +39,7 @@ class figures(object):
     def plotCoverageOnGene(self, geneName):
         ## check if the gene exist
         if geneName not in set(self.riboDf["gene_name"]):
-            sys.stderr.write("[error]\tthe database does not have gene: " + str(geneName))
+            sys.stderr.write("[error]\tthe database does not have gene: " + str(geneName) + "\n")
             return
         ## read the df and construct numpy array
         riboCnt = np.array(self.riboDf[self.riboDf["gene_name"] == geneName]["ribosome_count"])
@@ -80,7 +80,7 @@ class figures(object):
         geneNames = set(self.riboDf["gene_name"])
         pool = multiprocessing.Pool(self.processes)
         pool.map(self.plotCoverageOnGene, geneNames)
-        sys.stderr.write("[status]\tFinished plotting all genes.")
+        sys.stderr.write("[status]\tFinished plotting all genes" + "\n")
 
 
 ## ----------------------------------------
@@ -100,7 +100,7 @@ if __name__ == '__main__':
         args = parser.parse_args()
     ## process the file if the input files exist
     if (args.i != None and args.g != None and args.o != None):
-        sys.stderr.write("[status]\tprocessing the input file: " + args.i)
+        sys.stderr.write("[status]\tprocessing the input file: " + args.i + "\n")
         df_fn = args.i
         gene_name = args.g
         processes = args.p
@@ -112,13 +112,13 @@ if __name__ == '__main__':
         fig = figures(df_fn, output, processes)
         fig.loadDat()
         if gene_name != "all":
-            sys.stderr.write("[execute]\tplotting ribosome coverage for gene: " + str(gene_name))
+            sys.stderr.write("[execute]\tplotting ribosome coverage for gene: " + str(gene_name) + "\n")
             fig.plotCoverageOnGene(gene_name)
         else:
-            sys.stderr.write("[execute]\tplotting ribosome coverage for each gene")
+            sys.stderr.write("[execute]\tplotting ribosome coverage for each gene" + "\n")
             fig.plotAllGenes()
         ## end
-        sys.stderr.write("[status]\tPlotting module finished.")
+        sys.stderr.write("[status]\tPlotting module finished" + "\n")
     else:
-        sys.stderr.write("[error]\tmissing argument")
+        sys.stderr.write("[error]\tmissing argument" + "\n")
         parser.print_usage()

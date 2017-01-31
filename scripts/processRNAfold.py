@@ -71,7 +71,6 @@ class rnafold(object):
             self.lenDf = pd.DataFrame(lst, columns=["contig", "pos", "length"])
         elif self.header == "gene":
             self.lenDf = pd.DataFrame(lst, columns=["geneName", "length"])
-        # self.lenDf.to_csv(path_or_buf= 'debug.txt', sep='\t', index=False)
 
     def loadDpps(self, fn):
         filePath = self.folder + "/" + fn
@@ -98,7 +97,6 @@ class rnafold(object):
         lst = [[i] for i in range(geneLength)]
         fullDf = pd.DataFrame(lst, columns=["pos"])
         df = pd.merge(fullDf, probs, how = "left").fillna(0)
-        # df.to_csv(path_or_buf= self.output + geneName + '.pair_prob.txt', sep='\t', header=False, index=False)
         # save to dic
         if self.header == "gene":
             gene = geneName
@@ -113,7 +111,7 @@ class rnafold(object):
                 fileNames.append(file)
         pool = multiprocessing.Pool(16)
         pool.map(self.loadDpps, fileNames)
-        print("[status]\tFinished loading rnafold results for all.", flush=True)
+        sys.stderr.write("[status]\tFinished loading rnafold results for all" + "\n")
 
     def mergeAll(self):
         csvFile = open(self.output + '.txt', 'w')
@@ -138,20 +136,20 @@ if __name__ == '__main__':
 
     ## process the file if the input files exist
     if (args.f!=None):
-        print ("[status]\tReading the input fasta file: " + args.r, flush=True)
-        print ("[status]\tReading the rnafold files from " + args.f, flush=True)
+        sys.stderr.write("[status]\tReading the input fasta file: " + args.r + "\n")
+        sys.stderr.write("[status]\tReading the rnafold files from " + args.f + "\n")
         fasta = args.r
         folder = args.f
         output = args.o
         #
         rna = rnafold(fasta, folder, output)
-        print ("[status]\tParsing fasta file", flush=True)
+        sys.stderr.write("[status]\tParsing fasta file" + "\n")
         rna.loadFa()
-        print ("[status]\tParsing the pairing probability file", flush=True)
+        sys.stderr.write("[status]\tParsing the pairing probability file" + "\n")
         rna.loadAll()
-        print ("[status]\tMerging the pairing probabilities into one file", flush=True)
+        sys.stderr.write("[status]\tMerging the pairing probabilities into one file" + "\n")
         rna.mergeAll()
-        print ("[status]\tFinished.", flush=True)
+        sys.stderr.write("[status]\tProcessing RNAfold module finished" + "\n")
     else:
-        print ("[error]\tmissing argument", flush=True)
+        sys.stderr.write("[error]\tmissing argument" + "\n")
         parser.print_usage()
