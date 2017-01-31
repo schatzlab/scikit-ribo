@@ -29,18 +29,19 @@ class figures(object):
     ''' define a class for plotting figures
     '''
     def __init__(self, fn, output, processes):
-        #self.geneName = name
-        self.riboDf = pd.read_table(fn,  header=0)
+        self.fn = fn
         self.output = output
         self.processes = processes
 
+    def loadDat(self):
+        self.riboDf = pd.read_table(self.fn,  header=0)
+
     def plotCoverageOnGene(self, geneName):
-        ## confirm the gene exist
+        ## check if the gene exist
         if geneName not in set(self.riboDf["gene_name"]):
             print("[error]\tthe database does not have gene: ", str(geneName), flush=True)
             return
         ## read the df and construct numpy array
-        # geneName = self.geneName
         riboCnt = np.array(self.riboDf[self.riboDf["gene_name"] == geneName]["ribosome_count"])
         pairProb = np.array(self.riboDf[self.riboDf["gene_name"] == geneName]["pair_prob"])
         ## reverse the array if the strand is negative
@@ -50,15 +51,11 @@ class figures(object):
         ## sliding window average of the pair probability
         window = np.ones(5).astype(float)/5.0
         slidingWindowAvg = np.convolve(pairProb, window, mode="valid")
-
         ## plot the ribosome count along a transcript
         f, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
         f.suptitle(geneName)
         ax1.plot(riboCnt, sns.xkcd_rgb["denim blue"], lw = 2)
-        #print( [item.get_text() for item in ax1.get_xticklabels()])
-        #labels = range(-24, riboCnt.size+1)
-        # [int(float(item.get_text()))-24 for item in ax1.get_xticklabels()]
-        #ax1.set_xticklabels(labels)
+        ## indicate start/stop codons
         startCodonPos, stopCodonPos = 8, riboCnt.size-8
         ax1.axvline(startCodonPos, color="#999999",dashes=[3,2],zorder=-1)
         ax1.axvline(stopCodonPos ,color="#999999",dashes=[3,2],zorder=-1)
@@ -66,7 +63,6 @@ class figures(object):
         ax2 = plt.subplot(2, 1, 2)
         ax2.plot(pairProb, sns.xkcd_rgb["medium green"], label="Per codon pairing probability")
         ax2.plot(slidingWindowAvg, sns.xkcd_rgb["amber"], label="5 codon average probability")
-        #ax2.set_xticklabels(labels)
         ax2.set_ylim([0,1])
         ax2.set_ylabel("Pairing probability")
         ax2.set_xlabel("Position in transcript (5' -> 3')")
@@ -114,6 +110,7 @@ if __name__ == '__main__':
         os.system(cmd)
         # all genes or one gene
         fig = figures(df_fn, output, processes)
+        fig.loadDat()
         if gene_name != "all":
             print("[execute]\tplotting ribosome coverage for gene: " + str(gene_name), flush=True)
             fig.plotCoverageOnGene(gene_name)
@@ -122,7 +119,6 @@ if __name__ == '__main__':
             fig.plotAllGenes()
         ## end
         print("[status]\tPlotting module finished.", flush=True)
-
     else:
         print("[error]\tmissing argument", flush=True)
         parser.print_usage()
