@@ -90,13 +90,13 @@ class trainModel(object):
         self.selector = RFECV(self.clf, step=1, cv=5)
         self.selector = self.selector.fit(self.X, self.y)
         self.sltX = self.selector.transform(self.X)
-        print("[status]\tOptimal number of features based on recursive selection: %d" % self.selector.n_features_)
+        print("[result]\tOptimal number of features based on recursive selection: %d" % self.selector.n_features_, flush=True)
         ## define a new classifier for reduced features
         self.reducedClf = RandomForestClassifier(max_features=None, n_jobs=-1)
         self.reducedClf = self.reducedClf.fit(self.sltX, self.y)
         ## cross validation
         scores = cross_val_score(self.reducedClf, self.sltX, self.y, cv=10)
-        print("[status]\tAccuracy: %0.3f (+/- %0.3f)" % (scores.mean(), scores.std() * 2), flush=True)
+        print("[result]\tAccuracy: %0.3f (+/- %0.3f)" % (scores.mean(), scores.std() * 2), flush=True)
 
     def rfImportance(self):
         ## compute the std and index for the feature importance
@@ -129,11 +129,11 @@ class trainModel(object):
         paramGrid = [{'C': [ 0.01, 0.1, 1, 10, 100, 1000, 10000]}]
         self.clfGs = GridSearchCV(estimator=self.clf, param_grid=paramGrid, n_jobs=-1)
         self.clfGs.fit(self.X, self.y)
-        print("[status]\t best estimator parameters: c=", self.clfGs.best_estimator_.C, flush=True)
+        print("[result]\t best estimator parameters: c=", self.clfGs.best_estimator_.C, flush=True)
         ## model fitting and cross validation
         self.clf = svm.SVC(C=self.clfGs.best_estimator_.C)
         scores = cross_val_score(self.clf, self.X, self.y, cv=10)
-        print("[status]\tAccuracy: %0.3f (+/- %0.3f)" % (scores.mean(), scores.std() * 2), flush=True)
+        print("[result]\tAccuracy: %0.3f (+/- %0.3f)" % (scores.mean(), scores.std() * 2), flush=True)
 
     def rocCurve(self):
         ''' define a class for plotting multi-class roc curve
@@ -231,7 +231,7 @@ if __name__ == '__main__':
         args = parser.parse_args()
     ## process the file if the input files exist
     if (args.i != None and args.t != None):
-        print("[status]\tprocessing the input file: " + args.i, flush=True)
+        sys.stderr.write("[status]\tprocessing the input file: " + args.i)
         asite_fn = args.i
         cds_fn = args.t
         cds_idx = args.d
@@ -240,29 +240,29 @@ if __name__ == '__main__':
         RelE = False if args.e == 'F' else True
         cmd = "mkdir -p " + output
         os.system(cmd)
-        print("[execute]\tplotting the a-site location distribution from " + str(asite_fn), flush=True)
+        sys.stderr.write("[execute]\tplotting the a-site location distribution from " + str(asite_fn))
         asite_loc = visualizeAsite(asite_fn, RelE)
         asite_loc.plot()
-        print("[execute]\tstart the process of a-site prediction", flush=True)
+        sys.stderr.write("[execute]\tstart the process of a-site prediction")
         model = trainModel(asite_loc, cds_fn, cds_idx, classifier, RelE)
         if classifier == "rf":
-            print("[execute]\tperform model training and cross validation on the training data", flush=True)
+            sys.stderr.write("[execute]\tperform model training and cross validation on the training data")
             model.rfFit()
-            print("[execute]\tplotting the bar plot of the feature importance", flush=True)
+            sys.stderr.write("[execute]\tplotting the bar plot of the feature importance")
             model.rfImportance()
-            print("[execute]\tplot roc curve based on cross validation", flush=True)
+            sys.stderr.write("[execute]\tplot roc curve based on cross validation")
             model.rocCurve()
-            print("[execute]\tpredicting the a-site from the testing data", flush=True)
+            sys.stderr.write("[execute]\tpredicting the a-site from the testing data")
             model.rfPredict()
-            print("[execute]\tlocalize the a-site codon and create coverage df", flush=True)
+            sys.stderr.write("[execute]\tlocalize the a-site codon and create coverage df")
             model.recoverAsite()
         elif classifier == "svm":
-            print("[execute]\tperform SVM classifier training", flush=True)
+            sys.stderr.write("[execute]\tperform SVM classifier training")
             model.svmFit()
-            print("[execute]\tplot roc curve based on cross validation", flush=True)
+            sys.stderr.write("[execute]\tplot roc curve based on cross validation")
             model.rocCurve()
         ## end
-        print("[status]\tA-site module finished.", flush=True)
+        sys.stderr.write("[status]\tA-site module finished.")
     else:
-        print("[error]\tmissing argument", flush=True)
+        sys.stderr.write("[error]\tmissing argument")
         parser.print_usage()

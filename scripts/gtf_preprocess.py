@@ -227,7 +227,7 @@ if __name__ == '__main__':
         args = parser.parse_args()
     ## process the file if the input files exist
     if (args.g!=None) & (args.r!=None) & (args.o!=None):
-        print ("[status]\tReading the input file: " + args.g, flush=True)
+        sys.stderr.write("[status]\tReading the input file: " + args.g)
         input_gtf = args.g
         input_ref = args.r
         output = args.o
@@ -235,21 +235,21 @@ if __name__ == '__main__':
         cmd = 'mkdir -p ' + output
         os.system(cmd)
         ## execute
-        print("[execute]\tStarting the pre-processing module", flush=True)
+        sys.stderr.write("[execute]\tStarting the pre-processing module")
         gtf_hdl = gtf2Bed(input_gtf, input_ref, output)
-        print("[execute]\tLoading the the gtf file in to sql db", flush=True)
+        sys.stderr.write("[execute]\tLoading the the gtf file in to sql db")
         gtf_hdl.convertGtf()
-        print("[execute]\tCalculating the length of each chromosome", flush=True)
+        sys.stderr.write("[execute]\tCalculating the length of each chromosome")
         gtf_hdl.getChrLen()
-        print("[execute]\tExtracting the start codons' positions from the gtf db", flush=True)
+        sys.stderr.write("[execute]\tExtracting the start codons' positions from the gtf db")
         gtf_hdl.getStartCodon()
-        print("[execute]\tExtracting the sequences for each gene", flush=True)
+        sys.stderr.write("[execute]\tExtracting the sequences for each gene")
         gtf_hdl.getSeq()
-        print("[execute]\tBuilding the index for each position at the codon level", flush=True)
+        sys.stderr.write("[execute]\tBuilding the index for each position at the codon level")
         gtf_hdl.getCodons()
-        print("[execute]\tCreating the codon table for the coding region", flush=True)
+        sys.stderr.write("[execute]\tCreating the codon table for the coding region")
         gtf_hdl.createCodonTable()
-        print ("[status]\tGtf pre-processing module finished.", flush=True)
+        sys.stderr.write("[status]\tGtf pre-processing module finished.")
     else:
-        print ("[error]\tmissing argument", flush=True)
+        sys.stderr.write("[error]\tmissing argument")
         parser.print_usage() 

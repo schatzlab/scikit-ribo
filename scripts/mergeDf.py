@@ -26,7 +26,7 @@ from itertools import groupby
 class mergeDf(object):
     ''' class to sort and get start codon from a gtf file
     '''
-    
+
     def __init__(self, fn, pairprobFn, tpmFn, output):
         self.fn = fn
         self.pairprobFn = pairprobFn
@@ -60,7 +60,7 @@ class mergeDf(object):
             self.tpm.columns = ["gene_name", "TPM"]
         else:
             exit("Check file format, only support Salmon or Kallisto")
-        print("[status]\tTPM input is from", str(tool), flush=True)
+        sys.stderr.write("[status]\tTPM input is from" + str(tool))
 
     def mergeDf(self):
         # import codon df
@@ -91,7 +91,7 @@ if __name__ == '__main__':
         args = parser.parse_args()
     ## process the file if the input files exist
     if (args.f != None) & (args.s != None) & (args.t != None) & (args.o != None):
-        print("[status]\tReading the input file: " + args.f, flush=True)
+        sys.stderr.write("[status]\tReading the input file: " + args.f)
         fn = args.f
         pairprob = args.s
         tpm = args.t
@@ -100,16 +100,16 @@ if __name__ == '__main__':
         cmd = 'mkdir -p ' + output
         os.system(cmd)
         ## execute
-        print("[execute]\tStarting the pre-processing module", flush=True)
+        sys.stderr.write("[execute]\tStarting the pre-processing module")
         dat = mergeDf(fn, pairprob, tpm, output)
-        print("[execute]\tTransforming the dataframe of RNA 2' structure pairing probabilities", flush=True)
+        sys.stderr.write("[execute]\tTransforming the dataframe of RNA 2' structure pairing probabilities")
         dat.transformPairProb()
-        print("[execute]\tLoading tpm", flush=True)
+        sys.stderr.write("[execute]\tLoading tpm")
         dat.loadTpm()
-        print("[execute]\tMerging all the df together", flush=True)
+        sys.stderr.write("[execute]\tMerging all the df together")
         dat.mergeDf()
         ## finish
-        print("[status]\tData merging module finished.", flush=True)
+        sys.stderr.write("[status]\tData merging module finished.")
     else:
-        print("[error]\tmissing argument", flush=True)
+        sys.stderr.write("[error]\tmissing argument")
         parser.print_usage()

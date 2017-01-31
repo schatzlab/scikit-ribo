@@ -70,7 +70,7 @@ class processAln(object):
                 outBamHdl.write(read)
         inBamHdl.close()
         outBamHdl.close()
-        print("[status]\tFinished filtering the bam file", flush=True)
+        sys.stderr.write("[status]\tFinished filtering the bam file")
         # save the bedtool to local
         self.bedtool = pbt.BedTool(self.outBam)
         self.bedtool = self.bedtool.bam_to_bed(bed12=True)
@@ -104,7 +104,7 @@ class processAln(object):
         self.bedtool = pbt.BedTool(self.outBam + '.bed')
         trainingData = self.bedtool.intersect(self.startCodons, wa=True, wb=True, sorted=True)
         time = str(datetime.now())
-        print("[status]\tFinished intersecting the bedtool with start codons:", time, flush=True)
+        sys.stderr.write("[status]\tFinished intersecting the bedtool with start codons: " + time)
         # convert bedtool to df
         colNames = ['chrom', 'start', 'end', 'name', 'read_length', 'strand', 'thickStart', 'thickEnd', 'itemRgb',
                     'blockCount', 'blockSizes', 'blockStarts', 'sc_chrom', 'sc_start', 'sc_end', 'gene_name',
@@ -144,7 +144,7 @@ class processAln(object):
         self.bedtool = pbt.BedTool(self.outBam + '.bed')
         testingData = self.bedtool.intersect(self.orf, wa=True, wb=True, sorted=True)
         time = str(datetime.now())
-        print("[status]\tFinished intersecting the bedtool with ORFs:", time, flush=True)
+        sys.stderr.write("[status]\tFinished intersecting the bedtool with ORFs: " + time)
         colNames = ['chrom', 'start', 'end', 'name', 'read_length', 'strand', 'thickStart', 'thickEnd', 'itemRgb',
                     'blockCount', 'blockSizes', 'blockStarts', 'gene_chrom', 'gene_start', 'gene_end', 'gene_name',
                     'gene_score', 'gene_strand', 'gene_thickStart', 'gene_thickEnd', 'gene_itemRgb', 'gene_blockCount',
@@ -199,31 +199,31 @@ if __name__ == '__main__':
         orf = args.p + ".sort.CDS.bed"
         posRanges = args.p + ".pos_ranges.txt"
         time = str(datetime.now())
-        print("[status]\tStart the module at", time, flush=True)
-        print("[status]\tProcessing the input bam file:",  inBam, flush=True)
-        print("[status]\tOutput bam file name:", outBam, flush=True)
-        print("[status]\tReading the start codon BED file:", startCodons, flush=True)
-        print("[status]\tReading the open reading frame codon BED file:", orf, flush=True)
-        print("[status]\tReading the position-phase file:", posRanges, flush=True)
+        sys.stderr.write("[status]\tStart the module at " + time)
+        sys.stderr.write("[status]\tProcessing the input bam file: " + inBam)
+        sys.stderr.write("[status]\tOutput bam file name: " + outBam)
+        sys.stderr.write("[status]\tReading the start codon BED file: " + startCodons)
+        sys.stderr.write("[status]\tReading the open reading frame codon BED file: " + orf)
+        sys.stderr.write("[status]\tReading the position-phase file: " + posRanges)
         ## filter alignment
-        print("[execute]\tKeep only reads with length [" + str(minRL) + "," + str(maxRL) + "] and mapq = " + str(mapq), flush=True)
-        aln = processAln(inBam, mapq, outBam, minReadLen, maxReadLen, startCodons, orf, posRanges, RelE)
-        print("[execute]\tFilter out overlapping regions", flush=True)
+        sys.stderr.write("[execute]\tKeep reads with length [" + str(minRL) + ","+ str(maxRL) + "] and mapq >= " + str(mapq))
+        aln = processAln(inBam, mapq, outBam, minRL, maxRL, startCodons, orf, posRanges, RelE)
+        sys.stderr.write("[execute]\tFilter out overlapping regions")
         aln.filterRegion()
-        print("[execute]\tImport the position ranges", flush=True)
+        sys.stderr.write("[execute]\tImport the position ranges")
         aln.posIndex()
-        print("[execute]\tFilter out un-reliable alignment from bam files", flush=True)
+        sys.stderr.write("[execute]\tFilter out un-reliable alignment from bam files")
         aln.filterBam()
         time = str(datetime.now())
-        print("[execute]\tCreate dataframe - training data", time, flush=True)
+        sys.stderr.write("[execute]\tCreate dataframe - training data at " + time)
         aln.makeTrainingData()
         time = str(datetime.now())
-        print("[execute]\tCreate dataframe - testing data", time, flush=True)
+        sys.stderr.write("[execute]\tCreate dataframe - testing data at " + time)
         aln.makeTestingData()
         time = str(datetime.now())
-        print("[status]\tBam pre-processing finished at", time, flush=True)
+        sys.stderr.write("[status]\tBam pre-processing finished at " + time)
 
     else:
-        print("[error]\tmissing argument", flush=True)
+        sys.stderr.write("[error]\tmissing argument")
         parser.print_usage()
 

@@ -43,8 +43,8 @@ class glmTE(object):
 
     def filterDf(self):
         ## get a summary of the starting df
-        print ("[status]\tStarting number of observations:\t" + str(self.df.shape[0]), flush=True)
-        print ("[status]\tNumber of variables:\t" + str(self.df.shape[1]-1), flush=True)
+        sys.stderr.write("[status]\tStarting number of observations:\t" + str(self.df.shape[0]))
+        sys.stderr.write("[status]\tNumber of variables:\t" + str(self.df.shape[1]-1))
         ## rolling mean of 2' structure pairing probabilities
         tmp = self.df[["gene_name", "codon_idx", "pair_prob"]]
         rollingAvg = tmp.groupby("gene_name").rolling(window=11, center=True).mean().reset_index(0, drop=True)
@@ -89,28 +89,28 @@ class glmTE(object):
         self.df = self.df.dropna()
         self.df.to_csv(path_or_buf='filtered.txt', sep='\t', header=True, index=False)
         ## print status
-        print ("[status]\tTPM lower bound:\t" + str(tpmLB), flush=True)
-        print ("[status]\tNumber of observations after filtering:\t" + str(self.df.shape[0]), flush=True)
-        print ("[status]\tNumber of genes after filtering:\t" + str(numGenes), flush=True)
+        sys.stderr.write("[status]\tTPM lower bound:\t" + str(tpmLB))
+        sys.stderr.write("[status]\tNumber of observations after filtering:\t" + str(self.df.shape[0]))
+        sys.stderr.write("[status]\tNumber of genes after filtering:\t" + str(numGenes))
 
     def nbGlm(self):
         ## define model formula
         self.df = self.df[['ribosome_count', 'gene_name', 'codon', 'avg_prob_scaled', 'logTPM_scaled']]
         formula = 'ribosome_count ~ C(gene_name) + C(codon) + avg_prob_scaled'
-        print("[status]\tFormula: " + str(formula), flush=True)
+        sys.stderr.write("[status]\tFormula: " + str(formula))
         ## define model fitting options
         sovler = "IRLS" # "lbfgs"
         tolerence = 1e-4
         numIter = 100
-        print("[status]\tSolver: " + sovler, flush=True)
-        print("[status]\tConvergence tolerance: " + str(tolerence), flush=True)
-        print("[status]\tMaxiter: " + str(numIter), flush=True)
+        sys.stderr.write("[status]\tSolver: " + sovler)
+        sys.stderr.write("[status]\tConvergence tolerance: " + str(tolerence))
+        sys.stderr.write("[status]\tMaxiter: " + str(numIter))
         ## model fitting NegativeBinomial GLM
-        print("[status]\tModel: smf.glm(formula, self.df, family=sm.families.NegativeBinomial(), offset=self.df['logTPM_scaled']", flush=True)
+        sys.stderr.write("[status]\tModel: smf.glm(formula, self.df, family=sm.families.NegativeBinomial(), offset=self.df['logTPM_scaled']")
         mod = smf.glm(formula, self.df, family=sm.families.NegativeBinomial(), offset=self.df['logTPM_scaled'])
         res = mod.fit(method=sovler, tol=tolerence, maxiter=numIter)
         ## print model output
-        print (res.summary())
+        print(res.summary(), flush=True)
 
 ## the main process
 if __name__ == '__main__':
@@ -126,19 +126,19 @@ if __name__ == '__main__':
     ## process the file if the input files exist
     if (args.i!=None) & (args.u!=None):
         ## Load the content of the table
-        print("[status]\tstatsmodel version:\t"+ str(statsmodels.__version__), flush=True)
-        print("[status]\tReading the ribosome counts: " + str(args.i), flush=True)
-        print("[status]\tReading the un-mappable regions: " + str(args.u), flush=True)
+        sys.stderr.write("[status]\tstatsmodel version:\t" + str(statsmodels.__version__))
+        sys.stderr.write("[status]\tReading the ribosome counts: " + str(args.i))
+        sys.stderr.write("[status]\tReading the un-mappable regions: " + str(args.u))
         df_fn = args.i
         unmap_fn = args.u
         ## start model fitting
-        print("[execute]\tStart the modelling of TE", flush=True)
+        sys.stderr.write("[execute]\tStart the modelling of TE")
         mod = glmTE(df_fn, unmap_fn)
-        print("[execute]\tCalculate lengths of chromosomes and filter the df", flush=True)
+        sys.stderr.write("[execute]\tCalculate lengths of chromosomes and filter the df")
         mod.getLen()
         mod.filterDf()
-        print("[execute]\tFitting the GLM", flush=True)
+        sys.stderr.write("[execute]\tFitting the GLM")
         #mod.nbGlm()
     else:
-        print ("[error]\tmissing argument")
+        sys.stderr.write("[error]\tmissing argument")
         parser.print_usage()
