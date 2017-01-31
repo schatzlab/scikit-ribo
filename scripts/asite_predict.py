@@ -38,12 +38,12 @@ class visualizeAsite(object):
     '''
     def __init__(self, asiteFn, RelE):
         self.asiteFn = asiteFn
-        self.asiteDf = pd.read_table(asiteFn,  header=0)
         self.RelE = RelE
 
     def plot(self):
+        self.asiteDf = pd.read_table(self.asiteFn,  header=0)
         sns.set(font_scale=2)
-        g0 = sns.FacetGrid(self.asiteDf, row="five_offset", col="read_length", margin_titles=True,
+        g0 = sns.FacetGrid(self.asiteDf, row="5_offset", col="read_length", margin_titles=True,
                            col_order= list(range(20,36)), row_order= list(range(3)))
         bins = np.linspace(12, 21, 10) if not self.RelE else np.linspace(1, 10, 10)
         g0.map(plt.hist, "asite", color="steelblue", bins=bins, lw=0,normed=True)
@@ -54,8 +54,7 @@ class visualizeAsite(object):
         plt.gcf()
         plt.savefig(self.asiteFn +".asite_five_offset.pdf" )
         plt.clf()
-
-        g1 = sns.FacetGrid(self.asiteDf, row="three_offset", col="read_length", margin_titles=True,
+        g1 = sns.FacetGrid(self.asiteDf, row="3_offset", col="read_length", margin_titles=True,
                            col_order= list(range(20,36)), row_order= list(range(3)))
         g1.map(plt.hist, "asite", color="steelblue", bins=bins, lw=0,normed=True)
         if not self.RelE:
@@ -73,19 +72,17 @@ class trainModel(object):
     def __init__(self, object, testingFn, cdsIdxFn, classifier, RelE):
         self.traningDf = object.asiteDf
         self.asiteFn = object.asiteFn
-        self.colNames = list(self.traningDf.columns.values)
-        self.colNames.remove("asite")
-        self.X = np.array(pd.get_dummies(self.traningDf[self.colNames]))
-        self.y = np.array(self.traningDf["asite"])
         self.testingFn = testingFn
-        self.testingDf = pd.read_table(self.testingFn, header=0) # .dropna()
         self.cdsIdxFn = cdsIdxFn
-        self.cdsIdxDf = pd.read_table(self.cdsIdxFn, header=0)
-        self.featureNames =(pd.get_dummies(self.traningDf[self.colNames]).columns.values)
         self.classifier = classifier
         self.RelE = RelE
 
     def rfFit(self):
+        # column names
+        self.colNames = list(self.traningDf.columns.values)
+        self.colNames.remove("asite")
+        self.X = np.array(pd.get_dummies(self.traningDf[self.colNames]))
+        self.y = np.array(self.traningDf["asite"])
         ## feature selection
         self.clf = RandomForestClassifier(max_features=None, n_jobs=-1)
         self.clf = self.clf.fit(self.X, self.y)
@@ -97,15 +94,6 @@ class trainModel(object):
         ## define a new classifier for reduced features
         self.reducedClf = RandomForestClassifier(max_features=None, n_jobs=-1)
         self.reducedClf = self.reducedClf.fit(self.sltX, self.y)
-        ## feature selection based on thresholding
-        #cutoff = 0.02
-        #self.selector = SelectFromModel(self.reducedClf, prefit=True, threshold=cutoff)
-        #self.sltX = self.selector.transform(self.sltX)
-        #numSltFeatures = self.sltX.shape[1]
-        #print("[status]\t", str(numSltFeatures), "features with importance higher than", str(cutoff), flush=True)
-        ## define a new classifier for reduced features
-        #self.reducedClf = RandomForestClassifier(max_features=None, n_jobs=-1)
-        #self.reducedClf = self.reducedClf.fit(self.sltX, self.y)
         ## cross validation
         scores = cross_val_score(self.reducedClf, self.sltX, self.y, cv=10)
         print("[status]\tAccuracy: %0.3f (+/- %0.3f)" % (scores.mean(), scores.std() * 2), flush=True)
@@ -114,8 +102,8 @@ class trainModel(object):
         ## compute the std and index for the feature importance
         std = np.std([tree.feature_importances_ for tree in self.clf.estimators_],    axis=0)
         idx = np.argsort(self.importances)[::-1]
-        importantFeatures = self.featureNames[idx]
-
+        featureNames =(pd.get_dummies(self.traningDf[self.colNames]).columns.values)
+        importantFeatures = featureNames[idx]
         ## Plot the feature importances of the classifier
         plt.figure()
         plt.title("Feature importances")
@@ -134,7 +122,6 @@ class trainModel(object):
         ## selected a subset of features and predict a-site
         sltTestingX = self.selector.transform(testingX)
         self.testingDf["asite"] = self.reducedClf.predict(sltTestingX)
-        #self.testingDf.to_csv(path_or_buf=self.testingFn + '.predicted.txt', sep='\t', header=True, index=False)
 
     def svmFit(self):
         ## grid search
@@ -216,13 +203,13 @@ class trainModel(object):
         ## use to group by command to retrieve ribosome coverage
         coverageDf = self.testingDf.groupby(["chrom", "asite_start", "asite_end"])
         coverageDf = coverageDf.size().reset_index(name="ribosome_count")
-
         ## left outer join the null df and the groupby_df_count to get ribsome counts at each position
-        self.riboCountDf = pd.merge(self.cdsIdxDf, coverageDf, how = "left", on = ["chrom", "asite_start", "asite_end"])
-        self.riboCountDf["ribosome_count"].fillna(value=0, inplace=True)
-        self.riboCountDf["ribosome_count"] = self.riboCountDf["ribosome_count"].astype(int)
-        self.riboCountDf = self.riboCountDf.sort_values(by=["chrom", "asite_start", "asite_end"])
-        self.riboCountDf.to_csv(path_or_buf=self.testingFn + '.ribocount.txt', sep='\t', header=True, index=False)
+        cdsIdxDf = pd.read_table(self.cdsIdxFn, header=0)
+        riboCountDf = pd.merge(cdsIdxDf, coverageDf, how = "left", on = ["chrom", "asite_start", "asite_end"])
+        riboCountDf["ribosome_count"].fillna(value=0, inplace=True)
+        riboCountDf["ribosome_count"] = riboCountDf["ribosome_count"].astype(int)
+        riboCountDf = riboCountDf.sort_values(by=["chrom", "asite_start", "asite_end"])
+        riboCountDf.to_csv(path_or_buf=self.testingFn + '.ribocount.txt', sep='\t', header=True, index=False)
 
 
 ## ----------------------------------------
@@ -236,14 +223,12 @@ if __name__ == '__main__':
     parser.add_argument("-c", help="classifier to use, random forest (rf) or svm, optional, default: rf", default="rf")
     parser.add_argument("-e", help="whether the sample involved RelE, Default: F", default='F', type=str)
     parser.add_argument("-o", help="output path, required")
-
     ## check if there is any argument
     if len(sys.argv) <= 1:
         parser.print_usage()
         sys.exit(1)
     else:
         args = parser.parse_args()
-
     ## process the file if the input files exist
     if (args.i != None and args.t != None):
         print("[status]\tprocessing the input file: " + args.i, flush=True)
@@ -253,17 +238,13 @@ if __name__ == '__main__':
         classifier = args.c
         output = args.o
         RelE = False if args.e == 'F' else True
-
         cmd = "mkdir -p " + output
         os.system(cmd)
-
         print("[execute]\tplotting the a-site location distribution from " + str(asite_fn), flush=True)
         asite_loc = visualizeAsite(asite_fn, RelE)
         asite_loc.plot()
-
         print("[execute]\tstart the process of a-site prediction", flush=True)
         model = trainModel(asite_loc, cds_fn, cds_idx, classifier, RelE)
-
         if classifier == "rf":
             print("[execute]\tperform model training and cross validation on the training data", flush=True)
             model.rfFit()
@@ -275,16 +256,13 @@ if __name__ == '__main__':
             model.rfPredict()
             print("[execute]\tlocalize the a-site codon and create coverage df", flush=True)
             model.recoverAsite()
-
         elif classifier == "svm":
             print("[execute]\tperform SVM classifier training", flush=True)
             model.svmFit()
             print("[execute]\tplot roc curve based on cross validation", flush=True)
             model.rocCurve()
-
         ## end
         print("[status]\tA-site module finished.", flush=True)
-
     else:
         print("[error]\tmissing argument", flush=True)
         parser.print_usage()

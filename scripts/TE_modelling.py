@@ -15,7 +15,6 @@ from __future__ import print_function
 import sys
 import argparse
 import numpy as np
-sys.path.insert(1, [i for i in sys.path if 'statsmodels' in i and '0.8.0' in i][0])
 import statsmodels
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
@@ -30,11 +29,13 @@ from statsmodels.base.model import GenericLikelihoodModel
 class glmTE(object):
     ''' class to perform glm for TE estimation
     '''
-    def __init__(self, fn, unMappable):
-        self.df = pd.read_table(fn,  header=0)
-        self.unMappable = pbt.BedTool(unMappable)
+
+    def __init__(self, fn, unMappableFn):
+        self.fn = fn
+        self.unMappableFn = unMappableFn
 
     def getLen(self):
+        self.df = pd.read_table(self.fn,  header=0)
         tmp = self.df[["gene_name", "codon_idx"]]
         self.geneLen = tmp.groupby('gene_name').max().reset_index()
         self.geneLen.columns = ['gene_name', "gene_length"]
@@ -51,6 +52,7 @@ class glmTE(object):
         self.df = pd.merge(self.df, rollingAvg, how='left', on = ["gene_name", 'codon_idx'])
         self.df = self.df[["chrom", "asite_start", "asite_end", "gene_name", "codon_idx", "gene_strand", "codon", "TPM", "avg_prob", "ribosome_count"]]
         ## filter out unmappable regions
+        self.unMappable = pbt.BedTool(self.unMappableFn)
         colNames = list(self.df.columns.values)
         bt = pbt.BedTool.from_dataframe(self.df)
         btMapped = bt.intersect(self.unMappable, v=True)
@@ -91,14 +93,11 @@ class glmTE(object):
         print ("[status]\tNumber of observations after filtering:\t" + str(self.df.shape[0]), flush=True)
         print ("[status]\tNumber of genes after filtering:\t" + str(numGenes), flush=True)
 
-
-    #@profile
     def nbGlm(self):
         ## define model formula
         self.df = self.df[['ribosome_count', 'gene_name', 'codon', 'avg_prob_scaled', 'logTPM_scaled']]
         formula = 'ribosome_count ~ C(gene_name) + C(codon) + avg_prob_scaled'
         print("[status]\tFormula: " + str(formula), flush=True)
-
         ## define model fitting options
         sovler = "IRLS" # "lbfgs"
         tolerence = 1e-4
@@ -106,63 +105,24 @@ class glmTE(object):
         print("[status]\tSolver: " + sovler, flush=True)
         print("[status]\tConvergence tolerance: " + str(tolerence), flush=True)
         print("[status]\tMaxiter: " + str(numIter), flush=True)
-        
         ## model fitting NegativeBinomial GLM
         print("[status]\tModel: smf.glm(formula, self.df, family=sm.families.NegativeBinomial(), offset=self.df['logTPM_scaled']", flush=True)
         mod = smf.glm(formula, self.df, family=sm.families.NegativeBinomial(), offset=self.df['logTPM_scaled'])
         res = mod.fit(method=sovler, tol=tolerence, maxiter=numIter)
-
         ## print model output
         print (res.summary())
-
-        ## alternative fit a gamma dist
-        #formula = 'norm_count ~ C(gene_name) + C(codon)  + pair_prob '
-        #print("[status]\tFormula: " + str(formula), flush=True)
-        #mod = smf.glm(formula, self.df, family=sm.families.Gamma(link=sm.families.links.log))
-
-    #@profile
-    def genericGLM(self):
-        y, X = dmatrices('ribosome_count ~ C(gene_name) + C(codon) + avg_prob', self.df)
-        print(y)
-        print("\n")
-        print(X)
-
-        #mod = NBin(y, X)
-        #res = mod.fit('lbfgs')
-        #print(res)
-
-class NBin(GenericLikelihoodModel):
-    def __init__(self, endog, exog, **kwds):
-        super(NBin, self).__init__(endog, exog, **kwds)
-
-    def nloglikeobs(self, params):
-        alph = params[-1]
-        beta = params[:-1]
-        ll = _ll_nb2(self.endog, self.exog, beta, alph)
-        return -ll
-    def fit(self, start_params=None, maxiter=1000, maxfun=5000, **kwds):
-        if start_params == None:
-            # Reasonable starting values
-            start_params = np.append(np.zeros(self.exog.shape[1]), .5)
-            start_params[0] = np.log(self.endog.mean())
-        return super(NBin, self).fit(start_params=start_params,
-                                     maxiter=maxiter, maxfun=maxfun,
-                                     **kwds)
-
 
 ## the main process
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", help="input data-frame for modelling")
     parser.add_argument("-u", help="unmappable regions")
-    
     ## check if there is any argument
     if len(sys.argv) <= 1:
         parser.print_usage()
         sys.exit(1)
     else:
         args = parser.parse_args()
-
     ## process the file if the input files exist
     if (args.i!=None) & (args.u!=None):
         ## Load the content of the table
@@ -171,7 +131,6 @@ if __name__ == '__main__':
         print("[status]\tReading the un-mappable regions: " + str(args.u), flush=True)
         df_fn = args.i
         unmap_fn = args.u
-
         ## start model fitting
         print("[execute]\tStart the modelling of TE", flush=True)
         mod = glmTE(df_fn, unmap_fn)
@@ -179,8 +138,7 @@ if __name__ == '__main__':
         mod.getLen()
         mod.filterDf()
         print("[execute]\tFitting the GLM", flush=True)
-        mod.nbGlm()
-        #mod.genericGLM()
+        #mod.nbGlm()
     else:
         print ("[error]\tmissing argument")
         parser.print_usage()

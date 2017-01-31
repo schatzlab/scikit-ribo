@@ -26,14 +26,12 @@ from itertools import groupby
 class mergeDf(object):
     ''' class to sort and get start codon from a gtf file
     '''
-
+    
     def __init__(self, fn, pairprobFn, tpmFn, output):
-        self.codonsDf = pd.read_table(fn, header=0)
-        self.codonsDf['codon_idx'].astype(int)
+        self.fn = fn
         self.pairprobFn = pairprobFn
         self.tpmFn = tpmFn
-        self.base = os.path.basename(fn)
-        self.prefix = output + "/" + os.path.splitext(self.base)[0]
+        self.output = output
 
     def transformPairProb(self):
         ## read the pairing prob arrays then convert it to a df
@@ -65,11 +63,17 @@ class mergeDf(object):
         print("[status]\tTPM input is from", str(tool), flush=True)
 
     def mergeDf(self):
+        # import codon df
+        codonsDf = pd.read_table(self.fn, header=0) # to-change to codons
+        codonsDf['codon_idx'].astype(int)
         ## import the salmon df, rna secondary structure, and merge with cds df
-        codons = pd.merge(self.codonsDf, self.tpm, how="inner")
+        codons = pd.merge(codonsDf, self.tpm, how="inner")
         codons = pd.merge(codons, self.pairProb, how="left", on=["gene_name", "codon_idx"]).fillna('NA')
         codons = codons[["chrom", "asite_start", "asite_end", "gene_name", "codon_idx", "gene_strand", "codon", "TPM", "pair_prob"]]
-        codons.to_csv(path_or_buf=self.prefix + '.bed', sep='\t', header=True, index=False)
+        # parse prefix, export file
+        base = os.path.basename(self.fn)
+        prefix = self.output + "/" + os.path.splitext(base)[0]
+        codons.to_csv(path_or_buf=prefix + '.bed', sep='\t', header=True, index=False)
 
 
 ## the main process
