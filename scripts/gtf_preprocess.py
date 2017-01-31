@@ -3,7 +3,7 @@
 ## ----------------------------------------
 ## scikit-ribo 
 ## ----------------------------------------
-## a module for preprocessing gtf/bed files
+## a module for processing gtf/bed files
 ## ----------------------------------------
 ## author: Han Fang 
 ## contact: hanfang.cshl@gmail.com
@@ -27,16 +27,18 @@ from itertools import groupby
 class gtf2Bed(object):
     ''' class to sort and get start codon from a gtf file
     '''
-    def __init__(self, gtf, fasta, output):
+    def __init__(self, gtf=None, fasta=None, output=None):
         self.gtf = gtf
         self.fasta = fasta
-        self.base = os.path.basename(self.gtf)
-        self.prefix = output + "/" + os.path.splitext(self.base)[0]
+        self.output = output
         self.geneBed12s = []
         self.geneNames = []
         self.bedtool = None
         
     def convertGtf(self):
+        # parse prefix
+        self.base = os.path.basename(self.gtf)
+        self.prefix = self.output + "/" + os.path.splitext(self.base)[0]
         ## remove
         gtfDf = pd.read_table(self.gtf, comment="#", header=None)
         gtfDf = gtfDf[(gtfDf.iloc[:, 2] != 'gene') & (gtfDf.iloc[:, 2] != 'transcript')]
@@ -92,19 +94,23 @@ class gtf2Bed(object):
     def fastaIter(self, fastaFn, mode):
         fh = open(fastaFn)
         faiter = (x[1] for x in groupby(fh, lambda line: line[0] == ">"))
-        codonDic = {}
-        fastaDic = {}
+        codonDic, fastaDic, ntDic = {}, {}, {}
+        # iterate
         for header in faiter:
-            geneName = header.__next__()[1:].strip()
+            id = header.__next__()[1:].strip()
             seq = "".join(s.strip() for s in faiter.__next__())
-            seqLst = [seq[i:i+3] for i in range(0, len(seq), 3)]
-            codonDic[geneName] = seqLst
-            fastaDic[geneName] = seq
+            codons = [seq[i:i+3] for i in range(0, len(seq), 3)]
+            nts = list(seq)
+            codonDic[id] = codons
+            fastaDic[id] = seq
+            ntDic[id] = nts
         # return wrt to mode
         if mode == "codon":
             return codonDic
         elif mode == "seq":
             return fastaDic
+        elif mode == "nt":
+            return ntDic
 
     def fiveUtrBed(self, feature):
         fiveUtr = feature[:6]
@@ -129,7 +135,6 @@ class gtf2Bed(object):
         cdsBt.sequence(fi=self.fasta, fo= self.prefix + '.cds.fasta', s=True, name=True,  split=True)
         self.fastaDic = self.fastaIter(self.prefix + '.cds.fasta', "seq")
         # utr
-        # cdsBt = pbt.BedTool(self.prefix + '.sort.CDS.bed')
         fiveUtrBt = cdsBt.each(self.fiveUtrBed)
         threeUtrBt = cdsBt.each(self.threeUtrBed)
         fiveUtrBt.sequence(fi=self.fasta, fo=self.prefix + '.5utr.fasta', s=True, name=True,  split=True)
@@ -147,9 +152,9 @@ class gtf2Bed(object):
         ## extract cds sequence from the ref genome, iterate the transcript sequence and yield codons
         cdsBt = pbt.BedTool(self.prefix + '.sort.CDS.bed')
         ## create df
-        self.cdsDf = cdsBt.to_dataframe(names=['chrom', 'start', 'end', 'gene_name', 'score', 'strand', 'thickStart',
-                                                 'thickEnd', 'reserved', 'blockCount', 'blockSizes', 'blockStarts'])
-        # cdsBt.sequence(fi=self.fasta, fo=self.prefix + 'cds.fasta', s=True, name=True,  split=True)
+        colNames = ['chrom', 'start', 'end', 'gene_name', 'score', 'strand', 'thickStart', 'thickEnd', 'reserved',
+                    'blockCount', 'blockSizes', 'blockStarts']
+        self.cdsDf = cdsBt.to_dataframe(names=colNames)
         self.codonsDic = self.fastaIter(self.prefix + '.expandCDS.fasta', "codon") # parse a fasta file to a list of codons
 
     def createCodonTable(self):
