@@ -64,10 +64,10 @@ class mergeDf(object):
 
     def mergeDf(self):
         # import codon df
-        codonsDf = pd.read_table(self.fn, header=0) # to-change to codons
-        codonsDf['codon_idx'].astype(int)
+        codons = pd.read_table(self.fn, header=0)
+        codons['codon_idx'].astype(int)
         ## import the salmon df, rna secondary structure, and merge with cds df
-        codons = pd.merge(codonsDf, self.tpm, how="inner")
+        codons = pd.merge(codons, self.tpm, how="left", on=["gene_name"])
         codons = pd.merge(codons, self.pairProb, how="left", on=["gene_name", "codon_idx"]).fillna('NA')
         codons = codons[["chrom", "asite_start", "asite_end", "gene_name", "codon_idx", "gene_strand", "codon", "TPM", "pair_prob"]]
         # parse prefix, export file

@@ -39,14 +39,14 @@ class gtf2Bed(object):
         # parse prefix
         self.base = os.path.basename(self.gtf)
         self.prefix = self.output + "/" + os.path.splitext(self.base)[0]
-        ## remove
+        gtfDedup = self.prefix + '.dedup.gtf'
+        ## remove gene/transcript entries, remove chrM
         gtfDf = pd.read_table(self.gtf, comment="#", header=None)
         gtfDf = gtfDf[(gtfDf.iloc[:, 2] != 'gene') & (gtfDf.iloc[:, 2] != 'transcript')]
-        gtfDedup = self.prefix + '.dedup.gtf'
+        gtfDf = gtfDf[(gtfDf.iloc[:, 0] != 'chrM') & (gtfDf.iloc[:, 0] != 'chrMT') & (gtfDf.iloc[:, 0] != 'MT')]
         gtfDf.to_csv(path_or_buf=gtfDedup, sep='\t', header=False, index=False, quoting=csv.QUOTE_NONE)
-        ## create bedtool from gtf
+        ## create bedtool from gtf and a db from the gtf file
         self.bedtool = pbt.BedTool(gtfDedup)
-        ## create a db from the gtf file
         self.db = gffutils.create_db(gtfDedup, ":memory:", force=True, verbose=False)
         ## retrieve a list of gene names with type "CDS" from db
         for gene in self.db.features_of_type("CDS", order_by=("seqid","start")):
@@ -60,7 +60,7 @@ class gtf2Bed(object):
         ## sort the file
         self.geneBed12s = sorted(self.geneBed12s, key = lambda x: (x[0], x[1], x[2]))
         ## extract CDS entries, write to a bed12 file
-        with open(self.prefix + '.sort.CDS.bed', 'w', newline='') as csvfile:
+        with open(self.prefix + '.cds.bed', 'w', newline='') as csvfile:
             writer = csv.writer(csvfile, delimiter='\t')
             writer.writerows(self.geneBed12s)
 
@@ -80,14 +80,14 @@ class gtf2Bed(object):
         if "start_codon" in featureTypes:
             self.bedtool = self.bedtool.sort() # sort the entries
             self.startCodon = self.bedtool.filter(lambda x: x[2] == "start_codon")
-            self.startCodonBed = self.startCodon.each(gff2bed).saveas(self.prefix + '.sort.start.bed')
+            self.startCodonBed = self.startCodon.each(gff2bed).saveas(self.prefix + '.start.bed')
         else:
             geneBed6s = []
             for bed12 in self.geneBed12s:
                 bed6 = bed12[0:6]
                 bed6[2] = int(bed6[1]) + 3
                 geneBed6s.append(bed6)
-            with open(self.prefix + '.sort.start.bed', 'w', newline='') as csvfile:
+            with open(self.prefix + '.start.bed', 'w', newline='') as csvfile:
                 writer = csv.writer(csvfile, delimiter='\t')
                 writer.writerows(geneBed6s)
 
@@ -97,13 +97,13 @@ class gtf2Bed(object):
         codonDic, fastaDic, ntDic = {}, {}, {}
         # iterate
         for header in faiter:
-            id = header.__next__()[1:].strip()
+            key = header.__next__()[1:].strip().split(" ")[0]
             seq = "".join(s.strip() for s in faiter.__next__())
             codons = [seq[i:i+3] for i in range(0, len(seq), 3)]
             nts = list(seq)
-            codonDic[id] = codons
-            fastaDic[id] = seq
-            ntDic[id] = nts
+            codonDic[key] = codons
+            fastaDic[key] = seq
+            ntDic[key] = nts
         # return wrt to mode
         if mode == "codon":
             return codonDic
@@ -131,7 +131,7 @@ class gtf2Bed(object):
         return pbt.create_interval_from_list(threeUtr)
 
     def getSeq(self):
-        cdsBt = pbt.BedTool(self.prefix + '.sort.CDS.bed')
+        cdsBt = pbt.BedTool(self.prefix + '.cds.bed')
         cdsBt.sequence(fi=self.fasta, fo= self.prefix + '.cds.fasta', s=True, name=True,  split=True)
         self.fastaDic = self.fastaIter(self.prefix + '.cds.fasta', "seq")
         # utr
@@ -150,12 +150,12 @@ class gtf2Bed(object):
 
     def getCodons(self):
         ## extract cds sequence from the ref genome, iterate the transcript sequence and yield codons
-        cdsBt = pbt.BedTool(self.prefix + '.sort.CDS.bed')
+        cdsBt = pbt.BedTool(self.prefix + '.cds.bed')
         ## create df
         colNames = ['chrom', 'start', 'end', 'gene_name', 'score', 'strand', 'thickStart', 'thickEnd', 'reserved',
                     'blockCount', 'blockSizes', 'blockStarts']
         self.cdsDf = cdsBt.to_dataframe(names=colNames)
-        self.codonsDic = self.fastaIter(self.prefix + '.expandCDS.fasta', "codon") # parse a fasta file to a list of codons
+        self.codonsDic = self.fastaIter(self.prefix + '.expandCDS.fasta', "codon") # parse a fasta file to [codons]
 
     def createCodonTable(self):
         ## construct the gene level df from the bed12 file
@@ -208,9 +208,35 @@ class gtf2Bed(object):
                     pos = ends[ntIdx]
                     codons.append([chrom, pos-3, pos, geneName, codonIdx, geneStrand, codon])
         ## convert nested list to df
-        self.codonsDf = pd.DataFrame(codons, columns=["chrom", "asite_start", "asite_end", "gene_name", "codon_idx",
-                                                      "gene_strand", "codon"])
-        self.codonsDf.to_csv(path_or_buf=self.prefix + '.codonsDf.txt', sep='\t', header=True, index=False)
+        self.codonsDf = pd.DataFrame(codons, columns=["chrom", "start", "end", "gene_name", "codon_idx", "gene_strand", "codon"])
+        self.codonsDf.to_csv(path_or_buf=self.prefix + '.codons.txt', sep='\t', header=True, index=False)
+
+    def getNts(self):
+        # parse nts
+        self.ntDic = self.fastaIter(self.fasta, "nt") # parse a fasta file to [nts]
+        lst = []
+        for chr in sorted(self.ntDic.keys()):
+            nts = self.ntDic[chr]
+            for i in range(len(nts)):
+                nt = nts[i]
+                lst.append([chr, i, i+1, nt])
+        df = pd.DataFrame(lst, columns=["chrom", "start", "end", "nt"])
+        bt = pbt.BedTool.from_dataframe(df).sort()
+        # gene bedtool
+        geneBt = pbt.BedTool(self.prefix + '.cds.bed')
+        colNames = ['chrom', 'start', 'end', 'name', 'read_length', 'strand', 'thickStart', 'thickEnd', 'itemRgb',
+                    'blockCount', 'blockSizes', 'blockStarts']
+        geneDf = geneBt.to_dataframe(names=colNames)
+        cdsDf = geneDf[['chrom', 'start', 'end']]
+        geneDf["start"] = cdsDf["start"] - 30
+        geneDf["end"] = cdsDf["end"] + 30
+        geneBt = pbt.BedTool.from_dataframe(geneDf)
+        bt = bt.intersect(geneBt, wa=True, u=True, sorted=True)
+        df = bt.to_dataframe(names=["chrom", "start", "end", "nt"])
+        df = df[["chrom", "start", "nt"]].drop_duplicates(subset=["chrom", "start"])
+        df.rename(columns={'start': 'pos'}, inplace=True)
+        # export
+        df.to_csv(path_or_buf=self.prefix + '.nt_table.txt', sep='\t', header=True, index=False)
 
 
 ## the main process
@@ -228,28 +254,29 @@ if __name__ == '__main__':
     ## process the file if the input files exist
     if (args.g!=None) & (args.r!=None) & (args.o!=None):
         sys.stderr.write("[status]\tReading the input file: " + args.g + "\n")
-        input_gtf = args.g
-        input_ref = args.r
+        gtf = args.g
+        ref = args.r
         output = args.o
         # create output folder
         cmd = 'mkdir -p ' + output
         os.system(cmd)
         ## execute
         sys.stderr.write("[execute]\tStarting the pre-processing module" + "\n")
-        gtf_hdl = gtf2Bed(input_gtf, input_ref, output)
+        worker = gtf2Bed(gtf, ref, output)
         sys.stderr.write("[execute]\tLoading the the gtf file in to sql db" + "\n")
-        gtf_hdl.convertGtf()
+        worker.convertGtf()
         sys.stderr.write("[execute]\tCalculating the length of each chromosome" + "\n")
-        gtf_hdl.getChrLen()
+        worker.getChrLen()
         sys.stderr.write("[execute]\tExtracting the start codons' positions from the gtf db" + "\n")
-        gtf_hdl.getStartCodon()
+        worker.getStartCodon()
         sys.stderr.write("[execute]\tExtracting the sequences for each gene" + "\n")
-        gtf_hdl.getSeq()
+        worker.getSeq()
         sys.stderr.write("[execute]\tBuilding the index for each position at the codon level" + "\n")
-        gtf_hdl.getCodons()
+        worker.getCodons()
+        worker.getNts()
         sys.stderr.write("[execute]\tCreating the codon table for the coding region" + "\n")
-        gtf_hdl.createCodonTable()
-        sys.stderr.write("[status]\tGtf pre-processing module finished" + "\n")
+        worker.createCodonTable()
+        sys.stderr.write("[status]\tGtf processing module finished" + "\n")
     else:
         sys.stderr.write("[error]\tmissing argument" + "\n")
         parser.print_usage() 

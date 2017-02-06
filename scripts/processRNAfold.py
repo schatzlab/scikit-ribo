@@ -24,11 +24,11 @@ import pandas as pd
 class rnafold(object):
     ''' process rnafold outputs
     '''
-    def __init__(self, fa, folder, output):
+    def __init__(self, fa, input, output):
         self.fa = fa
-        self.folder = folder
+        self.input = input
         self.output = output
-        self.lengDf = None
+        self.lenDf = None
         self.header = None
         self.probDic = multiprocessing.Manager().dict()
 
@@ -71,9 +71,10 @@ class rnafold(object):
             self.lenDf = pd.DataFrame(lst, columns=["contig", "pos", "length"])
         elif self.header == "gene":
             self.lenDf = pd.DataFrame(lst, columns=["geneName", "length"])
+            self.geneSet = set(self.lenDf['geneName'].tolist())
 
     def loadDpps(self, fn):
-        filePath = self.folder + "/" + fn
+        filePath = self.input + "/" + fn
         # parse file names
         if self.header == "split":
             contig = fn.split("|")[3]
@@ -81,6 +82,9 @@ class rnafold(object):
             geneLength = self.lenDf[((self.lenDf['contig'] == contig) & (self.lenDf['pos'] == pos))]['length'].values[0]
         elif self.header == "gene":
             geneName = fn.split("_")[0]
+            # find intersection of chr length df and 2' structure probabilities
+            if geneName not in self.geneSet:
+                return
             geneLength = self.lenDf[(self.lenDf['geneName'] == geneName)]['length'].values[0]
         # parse file
         dp = []
@@ -105,16 +109,18 @@ class rnafold(object):
         self.probDic[gene] = df["probability"].tolist()
 
     def loadAll(self):
+        # save all file names to a list
         fileNames = []
-        for file in os.listdir(self.folder):
+        for file in os.listdir(self.input):
             if file.endswith("dp.ps"):
                 fileNames.append(file)
+        # pool and run in parallel
         pool = multiprocessing.Pool(16)
         pool.map(self.loadDpps, fileNames)
         sys.stderr.write("[status]\tFinished loading rnafold results for all" + "\n")
 
     def mergeAll(self):
-        csvFile = open(self.output + '.txt', 'w')
+        csvFile = open(self.output + '/rnafold.txt', 'w')
         for k, v in self.probDic.items():
             csvFile.write(k + "\t" + " ".join(str(i) for i in v) + "\n")
         csvFile.close()
@@ -123,9 +129,9 @@ class rnafold(object):
 ## the main process
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("-r", help="transcript fasta file, required")
-    parser.add_argument("-f", help="folder of rnafold outputs, required")
-    parser.add_argument("-o", help="output file prefix, required")
+    parser.add_argument("-f", help="transcript fasta file, required")
+    parser.add_argument("-i", help="input folder of rnafold files, required")
+    parser.add_argument("-o", help="output folder, required")
 
     ## check if there is any argument
     if len(sys.argv) <= 1:
@@ -136,20 +142,20 @@ if __name__ == '__main__':
 
     ## process the file if the input files exist
     if (args.f!=None):
-        sys.stderr.write("[status]\tReading the input fasta file: " + args.r + "\n")
-        sys.stderr.write("[status]\tReading the rnafold files from " + args.f + "\n")
-        fasta = args.r
-        folder = args.f
+        sys.stderr.write("[status]\tReading the input fasta file: " + args.f + "\n")
+        sys.stderr.write("[status]\tReading the rnafold files from " + args.i + "\n")
+        fasta = args.f
+        input = args.i
         output = args.o
         #
-        rna = rnafold(fasta, folder, output)
+        rna = rnafold(fasta, input, output)
         sys.stderr.write("[status]\tParsing fasta file" + "\n")
         rna.loadFa()
         sys.stderr.write("[status]\tParsing the pairing probability file" + "\n")
         rna.loadAll()
         sys.stderr.write("[status]\tMerging the pairing probabilities into one file" + "\n")
         rna.mergeAll()
-        sys.stderr.write("[status]\tProcessing RNAfold module finished" + "\n")
+        sys.stderr.write("[status]\tRNAfold processing module finished" + "\n")
     else:
         sys.stderr.write("[error]\tmissing argument" + "\n")
         parser.print_usage()
