@@ -28,7 +28,7 @@ import multiprocessing
 class figures(object):
     ''' define a class for plotting figures
     '''
-    def __init__(self, fn, output, processes):
+    def __init__(self, fn=None, output=None, processes=None):
         self.fn = fn
         self.output = output
         self.processes = processes
@@ -38,14 +38,14 @@ class figures(object):
 
     def plotCoverageOnGene(self, geneName):
         ## check if the gene exist
-        if geneName not in set(self.riboDf["gene_name"]):
+        if geneName not in set(self.riboDf["gene"]):
             sys.stderr.write("[error]\tthe database does not have gene: " + str(geneName) + "\n")
             return
         ## read the df and construct numpy array
-        riboCnt = np.array(self.riboDf[self.riboDf["gene_name"] == geneName]["ribosome_count"])
-        pairProb = np.array(self.riboDf[self.riboDf["gene_name"] == geneName]["pair_prob"])
+        riboCnt = np.array(self.riboDf[self.riboDf["gene"] == geneName]["ribosome_count"])
+        pairProb = np.array(self.riboDf[self.riboDf["gene"] == geneName]["pair_prob"])
         ## reverse the array if the strand is negative
-        if self.riboDf.loc[self.riboDf["gene_name"] == geneName]["gene_strand"].values[0] == "-":
+        if self.riboDf.loc[self.riboDf["gene"] == geneName]["gene_strand"].values[0] == "-":
             riboCnt = riboCnt[::-1]
             pairProb = pairProb[::-1]
         ## sliding window average of the pair probability
@@ -77,7 +77,7 @@ class figures(object):
 
     def plotAllGenes(self):
         ## loop over all genes and plot
-        geneNames = set(self.riboDf["gene_name"])
+        geneNames = set(self.riboDf["gene"])
         pool = multiprocessing.Pool(self.processes)
         pool.map(self.plotCoverageOnGene, geneNames)
         sys.stderr.write("[status]\tFinished plotting all genes" + "\n")
@@ -102,7 +102,7 @@ if __name__ == '__main__':
     if (args.i != None and args.g != None and args.o != None):
         sys.stderr.write("[status]\tprocessing the input file: " + args.i + "\n")
         df_fn = args.i
-        gene_name = args.g
+        gene = args.g
         processes = args.p
         output = args.o
         # create folders
@@ -111,9 +111,9 @@ if __name__ == '__main__':
         # all genes or one gene
         fig = figures(df_fn, output, processes)
         fig.loadDat()
-        if gene_name != "all":
-            sys.stderr.write("[execute]\tplotting ribosome coverage for gene: " + str(gene_name) + "\n")
-            fig.plotCoverageOnGene(gene_name)
+        if gene != "all":
+            sys.stderr.write("[execute]\tplotting ribosome coverage for gene: " + str(gene) + "\n")
+            fig.plotCoverageOnGene(gene)
         else:
             sys.stderr.write("[execute]\tplotting ribosome coverage for each gene" + "\n")
             fig.plotAllGenes()

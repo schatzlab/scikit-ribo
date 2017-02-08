@@ -27,7 +27,7 @@ class mergeDf(object):
     ''' class to sort and get start codon from a gtf file
     '''
 
-    def __init__(self, fn, pairprobFn, tpmFn, output):
+    def __init__(self, fn=None, pairprobFn=None, tpmFn=None, output=None):
         self.fn = fn
         self.pairprobFn = pairprobFn
         self.tpmFn = tpmFn
@@ -45,7 +45,7 @@ class mergeDf(object):
                 for prob in probs:
                     pairProb.append([geneName, codonIdx, float(prob)])
                     codonIdx += 1
-        self.pairProb = pd.DataFrame(pairProb, columns=["gene_name", "codon_idx", "pair_prob"])
+        self.pairProb = pd.DataFrame(pairProb, columns=["gene", "codon_idx", "pair_prob"])
 
     def loadTpm(self):
         self.tpm = pd.read_table(self.tpmFn, header=0)
@@ -53,11 +53,11 @@ class mergeDf(object):
         if 'TPM' in tpmColNames:
             tool = 'Salmon'
             self.tpm = self.tpm[["Name", "TPM"]]
-            self.tpm.columns = ["gene_name", "TPM"]
+            self.tpm.columns = ["gene", "TPM"]
         elif 'tpm' in tpmColNames:
             tool = 'Kallisto'
             self.tpm = self.tpm[["target_id", "tpm"]]
-            self.tpm.columns = ["gene_name", "TPM"]
+            self.tpm.columns = ["gene", "TPM"]
         else:
             exit("Check file format, only support Salmon or Kallisto")
         sys.stderr.write("[status]\tTPM input: " + str(tool) + "\n")
@@ -67,9 +67,9 @@ class mergeDf(object):
         codons = pd.read_table(self.fn, header=0)
         codons['codon_idx'].astype(int)
         ## import the salmon df, rna secondary structure, and merge with cds df
-        codons = pd.merge(codons, self.tpm, how="left", on=["gene_name"])
-        codons = pd.merge(codons, self.pairProb, how="left", on=["gene_name", "codon_idx"]).fillna('NA')
-        codons = codons[["chrom", "asite_start", "asite_end", "gene_name", "codon_idx", "gene_strand", "codon", "TPM", "pair_prob"]]
+        codons = pd.merge(codons, self.tpm, how="left", on="gene")
+        codons = pd.merge(codons, self.pairProb, how="left", on=["gene", "codon_idx"]).fillna('NA')
+        codons = codons[["chrom", "start", "end", "gene", "codon_idx", "gene_strand", "codon", "TPM", "pair_prob"]]
         # parse prefix, export file
         base = os.path.basename(self.fn)
         prefix = self.output + "/" + os.path.splitext(base)[0]

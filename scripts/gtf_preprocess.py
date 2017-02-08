@@ -152,7 +152,7 @@ class gtf2Bed(object):
         ## extract cds sequence from the ref genome, iterate the transcript sequence and yield codons
         cdsBt = pbt.BedTool(self.prefix + '.cds.bed')
         ## create df
-        colNames = ['chrom', 'start', 'end', 'gene_name', 'score', 'strand', 'thickStart', 'thickEnd', 'reserved',
+        colNames = ['chrom', 'start', 'end', 'gene', 'score', 'strand', 'thickStart', 'thickEnd', 'reserved',
                     'blockCount', 'blockSizes', 'blockStarts']
         self.cdsDf = cdsBt.to_dataframe(names=colNames)
         self.codonsDic = self.fastaIter(self.prefix + '.expandCDS.fasta', "codon") # parse a fasta file to [codons]
@@ -161,11 +161,11 @@ class gtf2Bed(object):
         ## construct the gene level df from the bed12 file
         codons = []
         posRangesWriter = open(self.prefix + ".pos_ranges.txt", "w")
-        posRangesWriter.write("#gene_name\tchr\tstrand\tpos_ranges\n")
+        posRangesWriter.write("#gene\tchr\tstrand\tpos_ranges\n")
         ## iterate over each gene
-        for geneName in self.cdsDf.gene_name:
+        for geneName in self.cdsDf.gene:
             ## get the info from df
-            row = self.cdsDf.loc[self.cdsDf["gene_name"] == geneName]
+            row = self.cdsDf.loc[self.cdsDf["gene"] == geneName]
             geneStart = row["start"].values[0]
             chrom = row["chrom"].values[0]
             geneStrand = row["strand"].values[0]
@@ -208,8 +208,8 @@ class gtf2Bed(object):
                     pos = ends[ntIdx]
                     codons.append([chrom, pos-3, pos, geneName, codonIdx, geneStrand, codon])
         ## convert nested list to df
-        self.codonsDf = pd.DataFrame(codons, columns=["chrom", "start", "end", "gene_name", "codon_idx", "gene_strand", "codon"])
-        self.codonsDf.to_csv(path_or_buf=self.prefix + '.codons.txt', sep='\t', header=True, index=False)
+        self.codonsDf = pd.DataFrame(codons, columns=["chrom", "start", "end", "gene", "codon_idx", "gene_strand", "codon"])
+        self.codonsDf.to_csv(path_or_buf=self.prefix + '.codons.bed', sep='\t', header=True, index=False)
 
     def getNts(self):
         # parse nts
