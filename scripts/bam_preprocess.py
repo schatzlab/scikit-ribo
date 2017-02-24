@@ -131,7 +131,7 @@ class processAln(object):
             training = training[((training['asite'] >= 9) & (training['asite'] <= 18))]
             training = training[(training['asite'] >= training['read_length'] / 2 - 1)]
         else:
-            training = training[((training['asite'] >= 1) & (training['asite'] <= 8))]
+            training = training[((training['asite'] >= 1) & (training['asite'] <= 5))]
         # get nts
         self.nts = pd.read_table(self.ntsFn, header=0)
         #
