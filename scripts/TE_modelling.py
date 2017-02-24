@@ -117,7 +117,6 @@ class glmTE(object):
         # remove unnecessary cols and NAs
         self.df = self.df.drop(["TPM", "avg_prob", "numCodons"], axis=1).dropna()
         self.df.to_csv(path_or_buf='filtered.txt', sep='\t', header=True, index=False, float_format='%.4f')
-        #self.df = self.df[["chrom", "start", "end", "gene", "codon_idx", "gene_strand", "codon", "logTPM_scaled", "avgProb_scaled", "ribosome_count"]]
 
     def nbGlm(self):
         ## define model formula
@@ -206,9 +205,11 @@ if __name__ == '__main__':
         ## start model fitting
         sys.stderr.write("[execute]\tStart the modelling of TE" + "\n")
         mod = glmTE(df_fn, unmap_fn, tpm_lb)
-        sys.stderr.write("[execute]\tCalculate lengths of chromosomes and filter the df" + "\n")
+        sys.stderr.write("[execute]\tLoading data" + "\n")
         mod.loadDat()
+        sys.stderr.write("[execute]\tFiltering the df" + "\n")
         mod.filterDf()
+        sys.stderr.write("[execute]\tScaling the variables" + "\n")
         mod.varScaling()
         sys.stderr.write("[execute]\tFitting the GLM" + "\n")
         #mod.checkrpy()
