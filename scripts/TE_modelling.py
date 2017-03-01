@@ -22,14 +22,13 @@ import numpy as np
 from patsy import dmatrices
 import pybedtools as pbt
 from statsmodels.base.model import GenericLikelihoodModel
-import rpy2.robjects.packages as rpackages
-import rpy2.robjects as ro
-import rpy2.robjects.numpy2ri as n2r
-# from glmnet import PoissonNet
+import glmnet_python
+from glmnet import glmnet
+from scipy import sparse
 # from memory_profiler import profile
 
 
-class GlmTE(object):
+class modelTE(object):
     """ perform glm for TE estimation
     """
     def __init__(self, fn=None, unMappableFn=None, tpmLB=1):
@@ -93,7 +92,7 @@ class GlmTE(object):
         # 5. remove genes that have too few codons remained (<10)
         geneFilter = self.df.groupby('gene').size().reset_index(name="remained")
         geneFilter["keep"] = np.where(geneFilter.remained > 10, True, False)
-        geneFilter = geneFilter[(geneFilter["keep"] is True)][['gene']]
+        geneFilter = geneFilter[(geneFilter["keep"] == True)][['gene']]
         self.df = pd.merge(self.df, geneFilter, how="inner", on=["gene"])
         # 6. exclude stop codons: TAG, TAA, TGA
         self.df = self.df[((self.df["codon"] != 'TAG') & (self.df["codon"] != 'TAA') & (self.df["codon"] != 'TGA'))]
@@ -140,56 +139,29 @@ class GlmTE(object):
         # print model output
         print(res.summary(), flush=True)
 
+    def sparseDfToCsc(self, df):
+        columns = df.columns
+        dat, rows = map(list, zip(
+            *[(df[col].sp_values - df[col].fill_value, df[col].sp_index.to_int_index().indices) for col in columns]))
+        cols = [np.ones_like(a) * i for (i, a) in enumerate(dat)]
+        datF, rowsF, colsF = np.concatenate(dat), np.concatenate(rows), np.concatenate(cols)
+        arr = sparse.coo_matrix((datF, (rowsF, colsF)), df.shape, dtype=np.float64)
+        return arr.tocsc()
+
     def glmnetFit(self):
-        X = np.array(pd.get_dummies(self.df[["gene", "codon"]]))
-        y = np.array(self.df["ribosome_count"])
-        lambdas = [1600, 400, 200] + list(range(100, 0, -1))
-        m = PoissonNet(n_splits=0, alpha=0, lambda_path=lambdas)
-        m = m.fit(X, y)
-        coefs = m.coef_path_
-        print(coefs)
-
-    def checkrpy(self):
-        """
-
-        :return:
-        """
-        # import R's utility package
-        utils = rpackages.importr('utils')
-        # select a mirror for R packages
-        utils.chooseCRANmirror(ind=1)  # select the first mirror in the list
-        # R package names
-        packnames = ['glmnet']
-        # R vector of strings
-        from rpy2.robjects.vectors import StrVector
-        # Selectively install what needs to be install.
-        # We are fancy, just because we can.
-        names_to_install = [x for x in packnames if not rpackages.isinstalled(x)]
-        if len(names_to_install) > 0:
-            utils.install_packages(StrVector(packnames), dependencies=True, repos='http://cran.rstudio.com/')
-
-    def rpyFit(self):
-        """
-
-        :return:
-        """
-        n2r.activate()
-        r = ro.r
-        r.library('glmnet')
-        #
-        # from rpy2.robjects import pandas2ri
-        # pandas2ri.activate()
-        #
         self.df = pd.read_table("filtered.txt",  header=0)
-        # offsets = ro.FloatVector(list(self.df.logTPM_scaled.transpose()))
-        X = np.array(pd.get_dummies(self.df[["gene", "codon"]]))
-        y = np.array(self.df["ribosome_count"])
-        y = ro.IntVector(list(y.transpose()))  # use factors
-        fit = r['cv.glmnet'](X, y, family="poisson", alpha=0, parallel=True)
-        # fit = r['cv.glmnet'](X, y, family="poisson", alpha=0, offset=offsets, parallel=True)
-        fit = np.asanyarray(fit.rx2('lambda'))
+        df = pd.get_dummies(self.df[["gene", "codon"]], sparse=True)
+        # X = np.array(pd.get_dummies(self.df[["gene", "codon"]]), dtype=np.float64)
+        X = self.sparseDfToCsc(df)
+        y = np.array(self.df["ribosome_count"], dtype=np.float64)
+        offsets = np.array(self.df["logTPM_scaled"], dtype=np.float64)
+        lambdas = np.array([1600, 400, 200] + list(range(100, 0, -1)))
+        # m = glmnet(n_splits=0, alpha=0, lambda_path=lambdas)
+        fit = glmnet(x=X.copy(), y=y.copy(), family='poisson', offset=offsets, alpha=0, lambdau=lambdas)
         print(fit)
-        # lambdas = [1600, 400, 200] + list(range(100, 0, -1))
+        # m = m.fit(X, y)
+        # coefs = m.coef_path_
+        # print(coefs)
 
 
 # main
@@ -215,16 +187,15 @@ if __name__ == '__main__':
         tpm_lb = args.l
         # start model fitting
         sys.stderr.write("[execute]\tStart the modelling of TE" + "\n")
-        mod = glmTE(df_fn, unmap_fn, tpm_lb)
+        mod = modelTE(df_fn, unmap_fn, tpm_lb)
         sys.stderr.write("[execute]\tLoading data" + "\n")
-        mod.loadDat()
+        #mod.loadDat()
         sys.stderr.write("[execute]\tFiltering the df" + "\n")
-        mod.filterDf()
+        #mod.filterDf()
         sys.stderr.write("[execute]\tScaling the variables" + "\n")
-        mod.varScaling()
+        #mod.varScaling()
         sys.stderr.write("[execute]\tFitting the GLM" + "\n")
-        # mod.checkrpy()
-        # mod.rpyFit()
+        mod.glmnetFit()
     else:
         sys.stderr.write("[error]\tmissing argument" + "\n")
         parser.print_usage()
