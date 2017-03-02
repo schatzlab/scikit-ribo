@@ -12,7 +12,7 @@
 # ----------------------------------------
 
 from __future__ import print_function
-import sys
+import sys, os
 import argparse
 import scipy
 import pandas as pd
@@ -21,6 +21,7 @@ from patsy import dmatrices
 import pybedtools as pbt
 from statsmodels.base.model import GenericLikelihoodModel
 from scipy import sparse
+import matplotlib.pyplot as plt
 import glmnet_python.glmnet as glmnet
 import glmnet_python.dataprocess as dataprocess
 import glmnet_python.glmnetCoef as glmnetCoef
@@ -173,10 +174,10 @@ class modelTE(object):
         cvcoefs = cvglmnetCoef(cvfit, s=cvfit['lambda_min'])
         # parse and scale coefficients
         intercept = cvcoefs[0][0]
-        geneBetas = pd.DataFrame([[varsNames[i-1].split("_")[1], cvcoefs[i][0]] for i in range(1, numGenes)], columns=["gene", "beta"])
+        geneBetas = pd.DataFrame([[varsNames[i-1].split("_")[1], cvcoefs[i][0]] for i in range(1, numGenes+1)], columns=["gene", "beta"])
         geneBetas["log2_TE"] = (geneBetas["beta"] - np.median(geneBetas["beta"])) / np.log(2)
         geneBetas.drop(["beta"], inplace=True, axis=1)
-        codonBetas = pd.DataFrame([[varsNames[i-1].split("_")[1], cvcoefs[i][0]] for i in range(numGenes, numGenes + numCodons)], columns=["codon", "beta"])
+        codonBetas = pd.DataFrame([[varsNames[i-1].split("_")[1], cvcoefs[i][0]] for i in range(numGenes+1, numGenes + numCodons+1)], columns=["codon", "beta"])
         codonBetas["log_codon_elongation_rate"] = (codonBetas["beta"] - np.median(codonBetas["beta"]))
         codonBetas["codon_elongation_rate"] = np.exp(codonBetas["log_codon_elongation_rate"])
         codonBetas.drop(["beta", "log_codon_elongation_rate"], inplace=True, axis=1)
