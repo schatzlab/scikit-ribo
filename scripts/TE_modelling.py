@@ -22,9 +22,11 @@ import numpy as np
 from patsy import dmatrices
 import pybedtools as pbt
 from statsmodels.base.model import GenericLikelihoodModel
-import glmnet_python
-from glmnet import glmnet
+#import glmnet_python
+#from glmnet import glmnet
 from scipy import sparse
+import glmnet_python.glmnet as glmnet
+import glmnet_python.dataprocess as dataprocess
 # from memory_profiler import profile
 
 
@@ -152,16 +154,17 @@ class modelTE(object):
         self.df = pd.read_table("filtered.txt",  header=0)
         df = pd.get_dummies(self.df[["gene", "codon"]], sparse=True)
         # X = np.array(pd.get_dummies(self.df[["gene", "codon"]]), dtype=np.float64)
-        X = self.sparseDfToCsc(df)
+        X = dataprocess().sparseDf(df)
+        avgProbArr = np.array(df["avgProb_scaled"].as_matrix().reshape(len(df['avgProb_scaled']), 1), dtype=np.float64)
+        X = np.vstack((X, avgProbArr))
+        #X = self.sparseDfToCsc(df)
         y = np.array(self.df["ribosome_count"], dtype=np.float64)
         offsets = np.array(self.df["logTPM_scaled"], dtype=np.float64)
         lambdas = np.array([1600, 400, 200] + list(range(100, 0, -1)))
         # m = glmnet(n_splits=0, alpha=0, lambda_path=lambdas)
+        print(X.shape, y.shape, offsets.shape)
         fit = glmnet(x=X.copy(), y=y.copy(), family='poisson', offset=offsets, alpha=0, lambdau=lambdas)
         print(fit)
-        # m = m.fit(X, y)
-        # coefs = m.coef_path_
-        # print(coefs)
 
 
 # main
