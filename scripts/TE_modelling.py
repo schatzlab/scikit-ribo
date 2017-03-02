@@ -14,20 +14,19 @@
 from __future__ import print_function
 import sys
 import argparse
-import statsmodels
-import statsmodels.api as sm
-import statsmodels.formula.api as smf
+import scipy
 import pandas as pd
 import numpy as np
 from patsy import dmatrices
 import pybedtools as pbt
 from statsmodels.base.model import GenericLikelihoodModel
-#import glmnet_python
-#from glmnet import glmnet
 from scipy import sparse
 import glmnet_python.glmnet as glmnet
 import glmnet_python.dataprocess as dataprocess
-# from memory_profiler import profile
+import glmnet_python.glmnetCoef as glmnetCoef
+#import statsmodels
+#import statsmodels.api as sm
+#import statsmodels.formula.api as smf
 
 
 class modelTE(object):
@@ -122,6 +121,7 @@ class modelTE(object):
         self.df.to_csv(path_or_buf='filtered.txt', sep='\t', header=True, index=False, float_format='%.4f')
 
     def nbGlm(self):
+        sys.stderr.write("[status]\tstatsmodels version:\t" + str(statsmodels.__version__) + "\n")
         # define model formula
         self.df = self.df[['ribosome_count', 'gene', 'codon', 'avgProb_scaled', 'logTPM_scaled']]
         formula = 'ribosome_count ~ C(gene) + C(codon) + avgProb_scaled'
@@ -151,21 +151,29 @@ class modelTE(object):
         return arr.tocsc()
 
     def glmnetFit(self):
-        self.df = pd.read_table("filtered.txt",  header=0)
-        df = pd.get_dummies(self.df[["gene", "codon"]], sparse=True)
-        # X = np.array(pd.get_dummies(self.df[["gene", "codon"]]), dtype=np.float64)
-        X = dataprocess().sparseDf(df)
-        avgProbArr = np.array(df["avgProb_scaled"].as_matrix().reshape(len(df['avgProb_scaled']), 1), dtype=np.float64)
-        X = np.vstack((X, avgProbArr))
-        #X = self.sparseDfToCsc(df)
+        #self.df = pd.read_table("filtered.txt",  header=0)
+        # prepare input arrays
+        cateVars = pd.get_dummies(self.df[["gene", "codon"]], sparse=True)
+        # numGenes, numCodons = len(self.df.gene.unique()), len(self.df.codon.unique())
+        cateVarsNames = list(cateVars.columns.values)
+        # cateVarsNames = cateVarsNames[1:numGenes] + cateVarsNames[numGenes+1:numGenes+numCodons]
+        avgProb = self.df["avgProb_scaled"]
+        avgProbArr = np.array(avgProb.as_matrix().reshape(len(avgProb), 1), dtype=np.float64)
+        cateVars = dataprocess().sparseDf(cateVars)
+        X = sparse.hstack([cateVars, avgProbArr], format="csc", dtype=np.float64)
+        varsNames = cateVarsNames + ["pairing_probability"]
         y = np.array(self.df["ribosome_count"], dtype=np.float64)
         offsets = np.array(self.df["logTPM_scaled"], dtype=np.float64)
+        # fit the model
         lambdas = np.array([1600, 400, 200] + list(range(100, 0, -1)))
-        # m = glmnet(n_splits=0, alpha=0, lambda_path=lambdas)
-        print(X.shape, y.shape, offsets.shape)
         fit = glmnet(x=X.copy(), y=y.copy(), family='poisson', offset=offsets, alpha=0, lambdau=lambdas)
-        print(fit)
-
+        coefs = glmnetCoef(fit, s=scipy.float64([0]))
+        # print(len(varsNames), len(coefs))
+        for i in range(1, len(coefs)):
+            lst = [str(varsNames[i]), str(coefs[i][0])]
+            print("\t".join(lst))
+        #betas = [varsNames, list(coefs)]
+        #print(pd.DataFrame(betas))
 
 # main
 if __name__ == '__main__':
@@ -182,7 +190,6 @@ if __name__ == '__main__':
     # process the file if the input files exist
     if (args.i is not None) & (args.u is not None):
         # Load the content of the table
-        sys.stderr.write("[status]\tstatsmodels version:\t" + str(statsmodels.__version__) + "\n")
         sys.stderr.write("[status]\tReading the ribosome counts: " + str(args.i) + "\n")
         sys.stderr.write("[status]\tReading the un-mappable regions: " + str(args.u) + "\n")
         df_fn = args.i
@@ -192,11 +199,11 @@ if __name__ == '__main__':
         sys.stderr.write("[execute]\tStart the modelling of TE" + "\n")
         mod = modelTE(df_fn, unmap_fn, tpm_lb)
         sys.stderr.write("[execute]\tLoading data" + "\n")
-        #mod.loadDat()
+        mod.loadDat()
         sys.stderr.write("[execute]\tFiltering the df" + "\n")
-        #mod.filterDf()
+        mod.filterDf()
         sys.stderr.write("[execute]\tScaling the variables" + "\n")
-        #mod.varScaling()
+        mod.varScaling()
         sys.stderr.write("[execute]\tFitting the GLM" + "\n")
         mod.glmnetFit()
     else:
