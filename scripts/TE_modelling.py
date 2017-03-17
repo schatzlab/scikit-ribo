@@ -54,7 +54,8 @@ class modelTE(object):
         """
         # read the df and un-mappable regions
         self.df = pd.read_table(self.fn,  header=0)
-        self.unMappable = pbt.BedTool(self.unMappableFn)
+        if self.unMappableFn:
+            self.unMappable = pbt.BedTool(self.unMappableFn)
         # compute the codon length
         codons = self.df[["gene", "codon_idx"]]
         codonLen = codons.groupby('gene').max().reset_index()
@@ -85,9 +86,10 @@ class modelTE(object):
         # 3. exclude genes w/ low RNA TPM, ribosome count > 100
         self.df = self.df[(self.df["TPM"] >= self.tpmLB)]
         # 4. filter out unmappable regions
-        colNames = list(self.df.columns.values)
-        bt = pbt.BedTool.from_dataframe(self.df).intersect(self.unMappable, v=True)
-        self.df = bt.to_dataframe(names=colNames)
+        if self.unMappable:
+            colNames = list(self.df.columns.values)
+            bt = pbt.BedTool.from_dataframe(self.df).intersect(self.unMappable, v=True)
+            self.df = bt.to_dataframe(names=colNames)
         # 5. remove genes that have too few codons remained (<10)
         geneFilter = self.df.groupby('gene').size().reset_index(name="remained")
         geneFilter["keep"] = np.where(geneFilter.remained > 10, True, False)
@@ -175,9 +177,9 @@ class modelTE(object):
         geneBetas["log2_TE"] = (geneBetas["beta"] - np.median(geneBetas["beta"])) / np.log(2)
         geneBetas.drop(["beta"], inplace=True, axis=1)
         codonBetas = pd.DataFrame([[varsNames[i-1].split("_")[1], coefs[i][0]] for i in range(numGenes+1, numGenes + numCodons + 1)], columns=["codon", "beta"])
-        codonBetas["log_codon_elongation_rate"] = (codonBetas["beta"] - np.median(codonBetas["beta"]))
-        codonBetas["codon_elongation_rate"] = np.exp(codonBetas["log_codon_elongation_rate"])
-        codonBetas.drop(["beta", "log_codon_elongation_rate"], inplace=True, axis=1)
+        codonBetas["log_codon_dwell_time"] = (codonBetas["beta"] - np.median(codonBetas["beta"]))
+        codonBetas["codon_dwell_time"] = np.exp(codonBetas["log_codon_dwell_time"])
+        codonBetas.drop(["beta", "log_codon_dwell_time"], inplace=True, axis=1)
         downstreamSLBeta = coefs[numGenes + numCodons + 1][0]
         # parse prefix
         base, dir = os.path.basename(self.fn), os.path.dirname(self.fn)
@@ -234,7 +236,7 @@ class modelTE(object):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", help="input data-frame for modelling")
-    parser.add_argument("-u", help="un-mappable regions")
+    parser.add_argument("-u", help="un-mappable regions", default=None)
     parser.add_argument("-l", help="lower bound of RNA tpm", default=1, type=int)
     # check if there is any argument
     if len(sys.argv) <= 1:
@@ -243,10 +245,13 @@ if __name__ == '__main__':
     else:
         args = parser.parse_args()
     # process the file if the input files exist
-    if (args.i is not None) & (args.u is not None):
+    if args.i is not None:
         # Load the content of the table
         sys.stderr.write("[status]\tReading the ribosome counts: " + str(args.i) + "\n")
-        sys.stderr.write("[status]\tReading the un-mappable regions: " + str(args.u) + "\n")
+        if args.u:
+            sys.stderr.write("[status]\tReading the un-mappable regions: " + str(args.u) + "\n")
+        else:
+            sys.stderr.write("[status]\tThe list of un-mappable regions was not provided""\n")
         df_fn = args.i
         unmap_fn = args.u
         tpm_lb = args.l
