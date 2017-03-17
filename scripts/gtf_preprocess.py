@@ -40,26 +40,26 @@ class gtf2Bed(object):
         self.base = os.path.basename(self.gtf)
         self.prefix = self.output + "/" + os.path.splitext(self.base)[0]
         gtfDedup = self.prefix + '.dedup.gtf'
-        ## remove gene/transcript entries, remove chrM
+        # remove gene/transcript entries, remove chrM
         gtfDf = pd.read_table(self.gtf, comment="#", header=None)
         gtfDf = gtfDf[(gtfDf.iloc[:, 2] != 'gene') & (gtfDf.iloc[:, 2] != 'transcript')]
         gtfDf = gtfDf[(gtfDf.iloc[:, 0] != 'chrM') & (gtfDf.iloc[:, 0] != 'chrMT') & (gtfDf.iloc[:, 0] != 'MT')]
         gtfDf.to_csv(path_or_buf=gtfDedup, sep='\t', header=False, index=False, quoting=csv.QUOTE_NONE)
-        ## create bedtool from gtf and a db from the gtf file
+        # create bedtool from gtf and a db from the gtf file
         self.bedtool = pbt.BedTool(gtfDedup)
         self.db = gffutils.create_db(gtfDedup, ":memory:", force=True, verbose=False)
-        ## retrieve a list of gene names with type "CDS" from db
+        # retrieve a list of gene names with type "CDS" from db
         for gene in self.db.features_of_type("CDS", order_by=("seqid","start")):
             self.geneNames.append(gene['gene_id'][0])
         self.geneNames = list(set(self.geneNames))
-        ## convert a gtf/gff3 file to bed12 and save to a nested list
+        # convert a gtf/gff3 file to bed12 and save to a nested list
         for geneName in self.geneNames:
             geneBed12 = self.db.bed12(geneName, name_field='gene_id')
             row = geneBed12.split("\t")
             self.geneBed12s.append([row[0], int(row[1]), int(row[2])] + row[3:])
-        ## sort the file
+        # sort the file
         self.geneBed12s = sorted(self.geneBed12s, key = lambda x: (x[0], x[1], x[2]))
-        ## extract CDS entries, write to a bed12 file
+        # extract CDS entries, write to a bed12 file
         with open(self.prefix + '.cds.bed', 'w', newline='') as csvfile:
             writer = csv.writer(csvfile, delimiter='\t')
             writer.writerows(self.geneBed12s)
@@ -74,9 +74,9 @@ class gtf2Bed(object):
             self.chrDic[chr] = len(seq)
 
     def getStartCodon(self):
-        ## return a set of feature types
+        # return a set of feature types
         featureTypes = set(list(self.db.featuretypes()))
-        ## sort by coordinates, extract start codon entries, save the records to a bed file
+        # sort by coordinates, extract start codon entries, save the records to a bed file
         if "start_codon" in featureTypes:
             self.bedtool = self.bedtool.sort() # sort the entries
             self.startCodon = self.bedtool.filter(lambda x: x[2] == "start_codon")
@@ -141,7 +141,7 @@ class gtf2Bed(object):
         threeUtrBt.sequence(fi=self.fasta, fo=self.prefix + '.3utr.fasta', s=True, name=True,  split=True)
         self.fiveUtrDic = self.fastaIter(self.prefix + '.5utr.fasta', "seq")
         self.threeUtrDic = self.fastaIter(self.prefix + '.3utr.fasta', "seq")
-        ## write expanded cds fasta to local
+        # write expanded cds fasta to local
         expandedFasta = open(self.prefix + '.expandCDS.fasta', 'w')
         for geneName in self.geneNames:
             expandedFasta.write(">" + geneName + "\n" +
@@ -149,29 +149,29 @@ class gtf2Bed(object):
         expandedFasta.close()
 
     def getCodons(self):
-        ## extract cds sequence from the ref genome, iterate the transcript sequence and yield codons
+        # extract cds sequence from the ref genome, iterate the transcript sequence and yield codons
         cdsBt = pbt.BedTool(self.prefix + '.cds.bed')
-        ## create df
+        # create df
         colNames = ['chrom', 'start', 'end', 'gene', 'score', 'strand', 'thickStart', 'thickEnd', 'reserved',
                     'blockCount', 'blockSizes', 'blockStarts']
         self.cdsDf = cdsBt.to_dataframe(names=colNames)
         self.codonsDic = self.fastaIter(self.prefix + '.expandCDS.fasta', "codon") # parse a fasta file to [codons]
 
     def createCodonTable(self):
-        ## construct the gene level df from the bed12 file
+        # construct the gene level df from the bed12 file
         codons = []
         posRangesWriter = open(self.prefix + ".pos_ranges.txt", "w")
         posRangesWriter.write("#gene\tchr\tstrand\tpos_ranges\n")
-        ## iterate over each gene
+        # iterate over each gene
         for geneName in self.cdsDf.gene:
-            ## get the info from df
+            # get the info from df
             row = self.cdsDf.loc[self.cdsDf["gene"] == geneName]
             geneStart = row["start"].values[0]
             chrom = row["chrom"].values[0]
             geneStrand = row["strand"].values[0]
             exonStarts = list(map(int, row["blockStarts"].values[0].split(",")))
             exonSizes = list(map(int, row["blockSizes"].values[0].split(",")))
-            ## extract the cds nt index, the order of exons, and save to a nested list
+            # extract the cds nt index, the order of exons, and save to a nested list
             posRanges = []
             if geneStrand == "+":
                 phase, distance = 0, 0
@@ -187,10 +187,10 @@ class gtf2Bed(object):
                     posRanges.append((geneStart + exonStarts[i], geneStart + exonStarts[i] + exonSizes[i], phase))
             # add 8 codons upstream and downstream
             posRanges = [(posRanges[0][0]-24, posRanges[0][0], 0)] + posRanges + [(posRanges[-1][1], posRanges[-1][1]+24, 0)]
-            ## create position ranges file for look ups
+            # create position ranges file for look ups
             posRangesStr = "|".join([ str(i[0]) + "," + str(i[1]) + "," + str(i[2]) for i in posRanges])
             posRangesWriter.write(geneName + "\t" + chrom + "\t" + geneStrand + "\t" + posRangesStr + "\n")
-            ## upstream + coding region + downstream of a gene
+            # upstream + coding region + downstream of a gene
             if geneStrand == "+":
                 starts = [start for posRange in posRanges for start in range(posRange[0], posRange[1])]
                 for ntIdx in range(0, len(starts), 3):
@@ -207,7 +207,7 @@ class gtf2Bed(object):
                     codonIdx = expandIdx-8
                     pos = ends[ntIdx]
                     codons.append([chrom, pos-3, pos, geneName, codonIdx, geneStrand, codon])
-        ## convert nested list to df
+        # convert nested list to df
         self.codonsDf = pd.DataFrame(codons, columns=["chrom", "start", "end", "gene", "codon_idx", "gene_strand", "codon"])
         self.codonsDf.to_csv(path_or_buf=self.prefix + '.codons.bed', sep='\t', header=True, index=False)
 
@@ -239,7 +239,7 @@ class gtf2Bed(object):
         df.to_csv(path_or_buf=self.prefix + '.nt_table.txt', sep='\t', header=True, index=False)
 
 
-## the main process
+# the main process
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-g", help="gtf file, required")

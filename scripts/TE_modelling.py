@@ -19,8 +19,9 @@ import pandas as pd
 import numpy as np
 from patsy import dmatrices
 import pybedtools as pbt
-from statsmodels.base.model import GenericLikelihoodModel
 from scipy import sparse
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import glmnet_python.glmnet as glmnet
 import glmnet_python.dataprocess as dataprocess
@@ -29,9 +30,6 @@ import glmnet_python.cvglmnet as cvglmnet
 import glmnet_python.cvglmnetCoef as cvglmnetCoef
 import glmnet_python.cvglmnetPlot as cvglmnetPlot
 import glmnet_python.cvglmnetPredict as cvglmnetPredict
-#import statsmodels
-#import statsmodels.api as sm
-#import statsmodels.formula.api as smf
 
 
 class modelTE(object):
@@ -44,7 +42,7 @@ class modelTE(object):
         :param tpmLB:
         """
         self.fn = fn
-        self.unMappableFn = unMappableFn
+        self.unMappableFn = unMappableFn # add this as option
         self.tpmLB = tpmLB
         self.unMappable = None
         self.df = None
@@ -63,12 +61,7 @@ class modelTE(object):
         codonLen.columns = ['gene', "numCodons"]
         codonLen["numCodons"] -= 8 # removed the appended 3 utr files
         self.df = pd.merge(self.df, codonLen, how="left", on=["gene"])
-        # rolling mean of 2' structure pairing probabilities
-        paring = self.df[["gene", "codon_idx", "pair_prob"]]
-        rollingAvg = paring.groupby("gene").rolling(window=11, center=True).mean().reset_index(0, drop=True)
-        rollingAvg.columns = ["gene", "codon_idx", "avg_prob"]
-        # merge 2' prob
-        self.df = pd.merge(self.df, rollingAvg, how='left', on=["gene", 'codon_idx']).drop(["pair_prob"], axis=1)
+        self.df.rename(columns={'pair_prob': 'downstreamSL'}, inplace=True)
         self.df = self.df.dropna()
 
     def filterDf(self):
@@ -82,13 +75,13 @@ class modelTE(object):
         # 1. exclude 5/3 utr codons
         self.df = self.df[(self.df["codon_idx"] <= self.df["numCodons"]) & (self.df["codon_idx"] >= 1)]
         # 2. exclude genes w/ low Ribo TPM
-        gene = self.df[["gene", "codon_idx", "ribosome_count"]].groupby("gene").sum().ribosome_count.reset_index(name="riboCnt")
+        genes = self.df[["gene", "codon_idx", "ribosome_count"]].groupby("gene").sum().ribosome_count.reset_index(name="riboCnt")
         codonLen = self.df[["gene", "numCodons"]].drop_duplicates(subset=["gene"])
-        gene = pd.merge(gene, codonLen, on="gene")
-        gene["rpkm"] = gene["riboCnt"] * 1000000000 / (np.sum(gene["riboCnt"]) * gene["numCodons"] * 3)
-        gene["tpm"] = gene["rpkm"] * 1000000 / np.sum(gene["rpkm"])
-        gene = gene[(gene["tpm"] >= self.tpmLB)][["gene"]]
-        self.df = pd.merge(self.df, gene, on="gene")
+        genes = pd.merge(genes, codonLen, on="gene")
+        genes["rpkm"] = genes["riboCnt"] * 1000000000 / (np.sum(genes["riboCnt"]) * genes["numCodons"] * 3)
+        genes["tpm"] = genes["rpkm"] * 1000000 / np.sum(genes["rpkm"])
+        genesToKeep = genes[(genes["tpm"] >= self.tpmLB)][["gene"]]
+        self.df = pd.merge(self.df, genesToKeep, on="gene")
         # 3. exclude genes w/ low RNA TPM, ribosome count > 100
         self.df = self.df[(self.df["TPM"] >= self.tpmLB)]
         # 4. filter out unmappable regions
@@ -120,12 +113,102 @@ class modelTE(object):
         tmp.drop(["logTPM", "TPM"], axis=1, inplace=True)
         self.df = pd.merge(self.df, tmp, how='left', on=["gene"])
         # variable scaling
-        self.df["avgProb_scaled"] = (self.df["avg_prob"] - np.mean(self.df["avg_prob"])) / np.std(self.df["avg_prob"])
+        # self.df["avgProb_scaled"] = (self.df["avg_prob"] - np.mean(self.df["avg_prob"])) / np.std(self.df["avg_prob"])
         # remove unnecessary cols and NAs
-        self.df = self.df.drop(["TPM", "avg_prob", "numCodons"], axis=1).dropna()
-        self.df.to_csv(path_or_buf='filtered.txt', sep='\t', header=True, index=False, float_format='%.4f')
+        self.df = self.df.drop(["TPM", "numCodons"], axis=1).dropna() # avg_prob
+
+    def sparseDfToCsc(self, df):
+        """
+        convert a pandas sparse dataframe to a scipy sparse array
+        :param df: pandas dataframe
+        :return: sparse array
+        """
+        columns = df.columns
+        dat, rows = map(list, zip(
+            *[(df[col].sp_values - df[col].fill_value, df[col].sp_index.to_int_index().indices) for col in columns]))
+        cols = [np.ones_like(a) * i for (i, a) in enumerate(dat)]
+        datF, rowsF, colsF = np.concatenate(dat), np.concatenate(rows), np.concatenate(cols)
+        arr = sparse.coo_matrix((datF, (rowsF, colsF)), df.shape, dtype=np.float64)
+        return arr.tocsc()
+
+    def glmnetArr(self):
+        """
+
+        :return:
+        """
+        # get col names
+        numGenes, numCodons = len(self.df.gene.unique()), len(self.df.codon.unique())
+        cateVars = pd.get_dummies(self.df[["gene", "codon"]], sparse=True)
+        cateVarsNames = list(cateVars.columns.values)
+        varsNames = cateVarsNames + ["secondary_structure"]
+        # prepare input arrays
+        # avgProb = self.df["avgProb_scaled"]
+        # avgProbArr = np.array(avgProb.as_matrix().reshape(len(avgProb), 1), dtype=np.float64)
+        cateVars = dataprocess().sparseDf(cateVars)
+        downstreamSL = np.array(self.df["downstreamSL"].as_matrix().reshape(len(self.df["downstreamSL"]), 1), dtype=np.float64)
+        X = sparse.hstack([cateVars, downstreamSL], format="csc", dtype=np.float64)
+        y = np.array(self.df["ribosome_count"], dtype=np.float64)
+        offsets = np.array(self.df["logTPM_scaled"], dtype=np.float64).reshape(len(self.df["logTPM_scaled"]), 1)
+        return X, y, offsets, numCodons, numGenes, varsNames
+
+    def glmnetFit(self, X, y, offsets, numCodons, numGenes, varsNames, lambda_min):
+        """
+
+        :param X:
+        :param y:
+        :param numCodons:
+        :param numGenes:
+        :param varsNames:
+        :param lambda_min:
+        :return:
+        """
+        # fit the model
+        if not lambda_min:
+            fit = cvglmnet(x=X.copy(), y=y.copy(), family='poisson', offset=offsets, alpha=0, parallel=True, lambda_min=np.array([0]))
+            coefs = cvglmnetCoef(fit, s=fit['lambda_min']) # lambda_min lambda_1se
+        else:
+            fit = glmnet(x=X.copy(), y=y.copy(), family='poisson', offset=offsets, alpha=0, lambda_min=np.array([0]))
+            coefs = glmnetCoef(fit, s=scipy.float64([lambda_min]))
+        # parse and scale coefficients
+        intercept = coefs[0][0]
+        geneBetas = pd.DataFrame([[varsNames[i-1].split("_")[1], coefs[i][0]] for i in range(1, numGenes+1)], columns=["gene", "beta"])
+        geneBetas["log2_TE"] = (geneBetas["beta"] - np.median(geneBetas["beta"])) / np.log(2)
+        geneBetas.drop(["beta"], inplace=True, axis=1)
+        codonBetas = pd.DataFrame([[varsNames[i-1].split("_")[1], coefs[i][0]] for i in range(numGenes+1, numGenes + numCodons + 1)], columns=["codon", "beta"])
+        codonBetas["log_codon_elongation_rate"] = (codonBetas["beta"] - np.median(codonBetas["beta"]))
+        codonBetas["codon_elongation_rate"] = np.exp(codonBetas["log_codon_elongation_rate"])
+        codonBetas.drop(["beta", "log_codon_elongation_rate"], inplace=True, axis=1)
+        downstreamSLBeta = coefs[numGenes + numCodons + 1][0]
+        # parse prefix
+        base, dir = os.path.basename(self.fn), os.path.dirname(self.fn)
+        prefix = dir + "/" + os.path.splitext(base)[0].split(".")[0]
+        #  export to local
+        geneBetas.to_csv(path_or_buf= dir + '/genesTE.csv', sep='\t', header=True, index=False, float_format='%.4f')
+        codonBetas.to_csv(path_or_buf= dir + '/codons.csv', sep='\t', header=True, index=False, float_format='%.4f')
+        # print results
+        if lambda_min:
+            sys.stderr.write("[results]\tpre-defined lambda: " + str(lambda_min) + "\n")
+        else:
+            sys.stderr.write("[results]\tlambda that gives minimum mean cv error: " + str(fit['lambda_min']) + "\n")
+            sys.stderr.write("[results]\tlambda 1 se away: " + str(fit['lambda_1se']) + "\n")
+        sys.stderr.write("[results]\tintercept: " + str(intercept) + "\n")
+        sys.stderr.write("[results]\tbetas for 2' structure windows: " + str(downstreamSLBeta) + "\n")
+        # plot
+        if not lambda_min:
+            plt.figure()
+            cvglmnetPlot(fit)
+            plt.gcf()
+            plt.savefig(prefix + ".lambda_cv.pdf")
+            plt.clf()
 
     def nbGlm(self):
+        """
+
+        :return:
+        """
+        import statsmodels
+        import statsmodels.api as sm
+        import statsmodels.formula.api as smf
         sys.stderr.write("[status]\tstatsmodels version:\t" + str(statsmodels.__version__) + "\n")
         # define model formula
         self.df = self.df[['ribosome_count', 'gene', 'codon', 'avgProb_scaled', 'logTPM_scaled']]
@@ -146,61 +229,6 @@ class modelTE(object):
         # print model output
         print(res.summary(), flush=True)
 
-    def sparseDfToCsc(self, df):
-        columns = df.columns
-        dat, rows = map(list, zip(
-            *[(df[col].sp_values - df[col].fill_value, df[col].sp_index.to_int_index().indices) for col in columns]))
-        cols = [np.ones_like(a) * i for (i, a) in enumerate(dat)]
-        datF, rowsF, colsF = np.concatenate(dat), np.concatenate(rows), np.concatenate(cols)
-        arr = sparse.coo_matrix((datF, (rowsF, colsF)), df.shape, dtype=np.float64)
-        return arr.tocsc()
-
-    def glmnetFit(self):
-        # get col names
-        self.df = pd.read_table("filtered.txt",  header=0)
-        numGenes, numCodons = len(self.df.gene.unique()), len(self.df.codon.unique())
-        cateVars = pd.get_dummies(self.df[["gene", "codon"]], sparse=True)
-        cateVarsNames = list(cateVars.columns.values)
-        varsNames = cateVarsNames + ["secondary_structure"]
-        # prepare input arrays
-        avgProb = self.df["avgProb_scaled"]
-        avgProbArr = np.array(avgProb.as_matrix().reshape(len(avgProb), 1), dtype=np.float64)
-        cateVars = dataprocess().sparseDf(cateVars)
-        X = sparse.hstack([cateVars, avgProbArr], format="csc", dtype=np.float64)
-        y = np.array(self.df["ribosome_count"], dtype=np.float64)
-        offsets = np.array(self.df["logTPM_scaled"], dtype=np.float64).reshape(len(self.df["logTPM_scaled"]), 1)
-        # fit the model
-        cvfit = cvglmnet(x=X.copy(), y=y.copy(), family='poisson', offset=offsets, alpha=0, parallel=True, lambda_min=np.array([0]))
-        cvcoefs = cvglmnetCoef(cvfit, s=cvfit['lambda_min'])
-        # parse and scale coefficients
-        intercept = cvcoefs[0][0]
-        geneBetas = pd.DataFrame([[varsNames[i-1].split("_")[1], cvcoefs[i][0]] for i in range(1, numGenes+1)], columns=["gene", "beta"])
-        geneBetas["log2_TE"] = (geneBetas["beta"] - np.median(geneBetas["beta"])) / np.log(2)
-        geneBetas.drop(["beta"], inplace=True, axis=1)
-        codonBetas = pd.DataFrame([[varsNames[i-1].split("_")[1], cvcoefs[i][0]] for i in range(numGenes+1, numGenes + numCodons+1)], columns=["codon", "beta"])
-        codonBetas["log_codon_elongation_rate"] = (codonBetas["beta"] - np.median(codonBetas["beta"]))
-        codonBetas["codon_elongation_rate"] = np.exp(codonBetas["log_codon_elongation_rate"])
-        codonBetas.drop(["beta", "log_codon_elongation_rate"], inplace=True, axis=1)
-        pairProbBeta = cvcoefs[-1][0]
-        # export to local
-        geneBetas.to_csv(path_or_buf='genesTE.csv', sep='\t', header=True, index=False, float_format='%.4f')
-        codonBetas.to_csv(path_or_buf='codons.csv', sep='\t', header=True, index=False, float_format='%.4f')
-        # parse prefix
-        base, dir = os.path.basename(self.fn), os.path.dirname(self.fn)
-        prefix = dir + "/" + os.path.splitext(base)[0]
-        # plot
-        plt.figure()
-        cvglmnetPlot(cvfit)
-        plt.gcf()
-        plt.savefig(prefix + ".lambda_cv.pdf")
-        plt.clf()
-        # print results
-        sys.stderr.write("[results]\tlambda that gives minimum mean cv error: " + str(cvfit['lambda_min']) + "\n")
-        sys.stderr.write("[results]\tintercept: " + str(intercept) + "\n")
-        sys.stderr.write("[results]\tbeta for secondary structure pairing probability: " + str(pairProbBeta) + "\n")
-        # lambdas = np.concatenate((np.arange(1600, 100, -400), np.arange(100, 1, -1), np.arange(1, 0, -0.01), np.array([0])))
-        # fit = glmnet(x=X.copy(), y=y.copy(), family='poisson', offset=offsets, alpha=0, lambda_min=np.array([0]))# lambdau=lambdas)
-        # coefs = glmnetCoef(fit, s=scipy.float64([0]))
 
 # main
 if __name__ == '__main__':
@@ -222,17 +250,19 @@ if __name__ == '__main__':
         df_fn = args.i
         unmap_fn = args.u
         tpm_lb = args.l
+        lambda_min = None
         # start model fitting
         sys.stderr.write("[execute]\tStart the modelling of TE" + "\n")
         mod = modelTE(df_fn, unmap_fn, tpm_lb)
         sys.stderr.write("[execute]\tLoading data" + "\n")
-        #mod.loadDat()
+        mod.loadDat()
         sys.stderr.write("[execute]\tFiltering the df" + "\n")
-        #mod.filterDf()
+        mod.filterDf()
         sys.stderr.write("[execute]\tScaling the variables" + "\n")
-        #mod.varScaling()
+        mod.varScaling()
         sys.stderr.write("[execute]\tFitting the GLM" + "\n")
-        mod.glmnetFit()
+        X, y, offsets, numCodons, numGenes, varsNames = mod.glmnetArr()
+        mod.glmnetFit(X, y, offsets, numCodons, numGenes, varsNames, lambda_min)
     else:
         sys.stderr.write("[error]\tmissing argument" + "\n")
         parser.print_usage()

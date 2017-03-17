@@ -90,7 +90,7 @@ class trainModel(object):
         self.selector = RFECV(self.clf, step=1, cv=5)
         self.selector = self.selector.fit(self.X, self.y)
         self.sltX = self.selector.transform(self.X)
-        print("[result]\tOptimal number of features based on recursive selection: %d" % self.selector.n_features_, flush=True)
+        print("[result]\tOptimal number of features by recursive selection: %d" % self.selector.n_features_, flush=True)
         ## define a new classifier for reduced features
         self.reducedClf = RandomForestClassifier(max_features=None, n_jobs=-1)
         self.reducedClf = self.reducedClf.fit(self.sltX, self.y)
@@ -197,12 +197,12 @@ class trainModel(object):
         # remove start/end for reads
         self.cds.drop(['start', 'end'], axis=1, inplace=True)
         ## use to group by command to retrieve ribosome coverage
-        cnt = self.cds.groupby(["chrom", "a_start", "a_end"])
+        cnt = self.cds.groupby(["chrom", "a_start", "a_end", "strand"])
         cnt = cnt.size().reset_index(name="ribosome_count")
         ## left outer join the null df and the groupby_df_count to get ribsome counts at each position
         cdsIdx = pd.read_table(self.cdsIdxFn, header=0)
-        riboCnt = pd.merge(cdsIdx, cnt, how="left", left_on=["chrom", "start", "end"], right_on=["chrom", "a_start", "a_end"])
-        #riboCnt = riboCnt[["chrom", "start", "end", "gene", "codon_idx", "gene_strand", "codon", "TPM", "pair_prob", "ribosome_count"]]
+        riboCnt = pd.merge(cdsIdx, cnt, how="left", left_on=["chrom", "start", "end", "gene_strand"],
+                           right_on=["chrom", "a_start", "a_end", "strand"])
         riboCnt.drop(['a_start', 'a_end'], axis=1, inplace=True)
         riboCnt["ribosome_count"].fillna(value=0, inplace=True)
         riboCnt["ribosome_count"] = riboCnt["ribosome_count"].astype(int)
@@ -231,7 +231,7 @@ if __name__ == '__main__':
         input = args.i
         asite_fn = input + "/riboseq.training"
         cds_fn = input + "/riboseq.cds"
-        cds_idx = input + "/" + args.p + ".codons.bed"
+        cds_idx = input + "/" + args.p + ".codons.df"
         classifier = args.c
         RelE = False if args.e == 'F' else True
         sys.stderr.write("[execute]\tplotting the a-site location distribution from " + str(asite_fn) + "\n")

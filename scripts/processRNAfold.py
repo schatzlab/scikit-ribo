@@ -38,7 +38,7 @@ class rnafold(object):
             if firstLine[0] != ">":
                 exit("check format")
             self.header = "split" if "|" in firstLine else "gene"
-        ## parse the file
+        # parse the file
         lst = []
         with open(self.fa, 'r') as f:
             dat = f.read().split("\n")
@@ -87,26 +87,40 @@ class rnafold(object):
                 return
             geneLength = self.lenDf[(self.lenDf['geneName'] == geneName)]['length'].values[0]
         # parse file
-        dp = []
+        lbox, ubox = [], []
         with open(filePath, 'r') as hdl:
             for line in hdl:
                 tmp = line.strip().split(" ")
                 if len(tmp) == 4 and tmp[3] == 'ubox':
+                    pos, target, prob = int(tmp[0]), int(tmp[1]), float(tmp[2]) ** 2
+                    ubox.append([pos, target, prob])
+                    ubox.append([target, pos, prob])
+                if len(tmp) == 4 and tmp[3] == 'lbox':
                     pos, target, prob = int(tmp[0]), int(tmp[1]), float(tmp[2])
-                    dp.append([pos, target, prob])
-        probs = pd.DataFrame(dp, columns=["pos", "target", "probability"])
-        grouped = probs.groupby('pos').max().reset_index()
-        probs = grouped[["pos", "probability"]].fillna(value=0)
+                    lbox.append([pos, target, prob])
+        # lbox
+        lbox_probs = pd.DataFrame(lbox, columns=["pos", "target", "probability"])
+        lbox_grouped = lbox_probs.groupby('pos').max().reset_index()
+        lbox_probs = lbox_grouped[["pos", "probability"]].fillna(value=0)
+        # ubox
+        ubox_probs = pd.DataFrame(ubox, columns=["pos", "target", "probability"])
+        ubox_grouped = ubox_probs.groupby('pos').max().reset_index()
+        ubox_probs = ubox_grouped[["pos", "probability"]].fillna(value=0)
         # adding zeros to missing values
         lst = [[i] for i in range(geneLength)]
         fullDf = pd.DataFrame(lst, columns=["pos"])
-        df = pd.merge(fullDf, probs, how = "left").fillna(0)
+        lbox_df = pd.merge(fullDf, lbox_probs, how = "left").fillna(0)
+        lbox_df = lbox_df.sort_values("pos")
+        # ubox
+        ubox_df = pd.merge(fullDf, ubox_probs, how = "left").fillna(0)
+        ubox_df = ubox_df.sort_values("pos")
         # save to dic
         if self.header == "gene":
             gene = geneName
         elif self.header == "split":
             gene = contig + "|" + pos
-        self.probDic[gene] = df["probability"].tolist()
+        # save a list to dic
+        self.probDic[gene] = [lbox_df["probability"].tolist(), ubox_df["probability"].tolist()]
 
     def loadAll(self):
         # save all file names to a list
@@ -115,18 +129,25 @@ class rnafold(object):
             if file.endswith("dp.ps"):
                 fileNames.append(file)
         # pool and run in parallel
-        pool = multiprocessing.Pool(16)
+        pool = multiprocessing.Pool(multiprocessing.cpu_count())
         pool.map(self.loadDpps, fileNames)
         sys.stderr.write("[status]\tFinished loading rnafold results for all" + "\n")
 
     def mergeAll(self):
+        # write lbox
         csvFile = open(self.output + '/rnafold.txt', 'w')
         for k, v in self.probDic.items():
-            csvFile.write(k + "\t" + " ".join(str(i) for i in v) + "\n")
+            lbox = v[0]
+            csvFile.write(k + "\t" + " ".join(str(i) for i in lbox) + "\n")
         csvFile.close()
+        # write ubox
+        uboxFile = open(self.output + '/rnafold_ubox.txt', 'w')
+        for k, v in self.probDic.items():
+            ubox = v[1]
+            uboxFile.write(k + "\t" + " ".join(str(i) for i in ubox) + "\n")
+        uboxFile.close()
 
-
-## the main process
+# the main process
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-f", help="transcript fasta file, required")

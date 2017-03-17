@@ -53,7 +53,7 @@ class callRnafold(object):
 
     def runAll(self):
         geneNames = self.fastaDic.keys()
-        pool = multiprocessing.Pool(16)
+        pool = multiprocessing.Pool(multiprocessing.cpu_count())
         pool.map(self.callRnafold, geneNames)
         print("[status]\tFinished calling rnafold for all.", flush=True)
     

@@ -39,12 +39,21 @@ class mergeDf(object):
         with open(self.pairprobFn, 'r') as fl:
             for line in fl:
                 row = line.split("\t")
-                codonIdx = -8
                 geneName = row[0]
-                probs = row[1].split(" ")
-                for prob in probs:
-                    pairProb.append([geneName, codonIdx, float(prob)])
-                    codonIdx += 1
+                probs = [float(i) for i in row[1].split(" ")]
+                numCodons = int(len(probs) / 3 - 16)
+                for codonIdx in range(-8, numCodons+8):
+                    arrIdx = codonIdx + 8
+                    if codonIdx < -6 or codonIdx >= numCodons - 1:
+                        pairProb.append([geneName, codonIdx, float(0)])
+                    else:
+                        curr       = sum(probs[(arrIdx - 2) * 3: (arrIdx + 4) * 3])
+                        downstream = sum(probs[(arrIdx + 4) * 3: (arrIdx + 10) * 3])
+                        edge = probs[(arrIdx + 4) * 3 -1]
+                        if curr < 3 and downstream > 16 and edge == 0.0: #0.95*17
+                            pairProb.append([geneName, codonIdx, float(1)])
+                        else:
+                            pairProb.append([geneName, codonIdx, float(0)])
         self.pairProb = pd.DataFrame(pairProb, columns=["gene", "codon_idx", "pair_prob"])
 
     def loadTpm(self):
@@ -66,17 +75,17 @@ class mergeDf(object):
         # import codon df
         codons = pd.read_table(self.fn, header=0)
         codons['codon_idx'].astype(int)
-        ## import the salmon df, rna secondary structure, and merge with cds df
+        # import the salmon df, rna secondary structure, and merge with cds df
         codons = pd.merge(codons, self.tpm, how="left", on="gene")
         codons = pd.merge(codons, self.pairProb, how="left", on=["gene", "codon_idx"]).fillna('NA')
         codons = codons[["chrom", "start", "end", "gene", "codon_idx", "gene_strand", "codon", "TPM", "pair_prob"]]
         # parse prefix, export file
         base = os.path.basename(self.fn)
         prefix = self.output + "/" + os.path.splitext(base)[0]
-        codons.to_csv(path_or_buf=prefix + '.bed', sep='\t', header=True, index=False)
+        codons.to_csv(path_or_buf=prefix + '.df', sep='\t', header=True, index=False)
 
 
-## the main process
+# the main process
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-f", help="dataframe file of codon table, required")

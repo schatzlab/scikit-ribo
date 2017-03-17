@@ -22,7 +22,6 @@ import numpy as np
 import csv
 import errno
 from datetime import datetime
-from memory_profiler import profile
 
 
 class processAln(object):
@@ -53,14 +52,13 @@ class processAln(object):
         startCodonHash = set([(i[0], i[1], i[2]) for i in distinctStartCodons])
         self.startCodons = self.startCodons.filter(lambda x: (x[0], x[1], x[2]) in startCodonHash)
 
-    ## TODO: add a function to see whether there are too many soft-clipped alignment
-    # @profile
+    # TODO: add a function to see whether there are too many soft-clipped alignment
     def filterBam(self):
         # create a template/header from the input bam file
         inBam = pysam.AlignmentFile(self.bam, "rb")
         self.prefix = self.output + "/riboseq"
         outBam = pysam.AlignmentFile(self.prefix + ".bam", "wb", template=inBam)
-        ## read a bam file and extract info
+        # read a bam file and extract info
         cigar_to_exclude = set([1,2,3,4,5]) #set(['I','D','S','H'])
         for read in inBam.fetch():
             cigars = set([c[0] for c in read.cigartuples])
@@ -78,7 +76,7 @@ class processAln(object):
         self.bedtool.saveas(self.prefix + '.bed')
 
     def posIndex(self):
-        ## create a dict to store the position read-frame and index info
+        # create a dict to store the position read-frame and index info
         self.posOffsets, self.negOffsets = [], []
         with open(self.posRanges, 'r') as f:
             next(f) # skip header
@@ -90,7 +88,7 @@ class processAln(object):
                 else:
                     boxes = boxes[::-1] # flip the order
                     self.negOffsets.extend([[chr, pos, (abs(pos-(box[1]+15)) + box[2])%3] for box in boxes for pos in range(box[1]+15, box[0]-12, -1)])
-        ## convert to dataframe
+        # convert to dataframe
         self.posOffsets = pd.DataFrame(self.posOffsets, columns=["chrom", "pos", "offset"]).drop_duplicates(subset=["chrom", "pos"])
         self.negOffsets = pd.DataFrame(self.negOffsets, columns=["chrom", "pos", "offset"]).drop_duplicates(subset=["chrom", "pos"])
 
@@ -102,31 +100,31 @@ class processAln(object):
     def makeTrainingData(self):
         # intersect with start codons
         self.bedtool = pbt.BedTool(self.prefix + '.bed')
-        training = self.bedtool.intersect(self.startCodons, wa=True, wb=True, sorted=True)
+        training = self.bedtool.intersect(self.startCodons, wa=True, wb=True, sorted=True, s=True)
         time = str(datetime.now())
         sys.stderr.write("[status]\tFinished intersecting the bedtool with start codons: " + time + "\n")
         # convert bedtool to df
         colNames = ['chrom', 'start', 'end', 'name', 'read_length', 'strand', 'sc_chrom', 'sc_start', 'sc_end', 'gene',
                     'sc_score', 'gene_strand']
         training = training.to_dataframe(names=colNames)
-        ### a-site
+        # a-site
         if not self.RelE:
             training['asite'] = np.where(training['gene_strand'] == '+', training['sc_start'] - training['start'] + 3,
                                          training['end'] - training['sc_end'] + 3 )
         else:
             training['asite'] = np.where(training['gene_strand'] == '+', training['end'] - training['sc_start'] - 3,
                                          training['sc_end'] - training['start'] - 3 )
-        ## phasing 5'
+        # phasing 5'
         tmpA = pd.merge(training, self.posOffsets, left_on=["chrom", "start"], right_on=["chrom", "pos"])
         tmpB = pd.merge(training, self.negOffsets, left_on=["chrom", "end"], right_on=["chrom", "pos"])
         training = pd.concat([tmpA, tmpB])
         training.rename(columns={'offset':'5_offset'}, inplace=True)
-        ## phasing 3'
+        # phasing 3'
         tmpA = pd.merge(training, self.posOffsets, left_on=["chrom", "end"], right_on=["chrom", "pos"])
         tmpB = pd.merge(training, self.negOffsets, left_on=["chrom", "start"], right_on=["chrom", "pos"])
         training = pd.concat([tmpA, tmpB])
         training.rename(columns={'offset':'3_offset'}, inplace=True)
-        ## filter a read by whether it has a-site that satisfies [9,18] or [1,8]
+        # filter a read by whether it has a-site that satisfies [9,18] or [1,8]
         if not self.RelE:
             training = training[((training['asite'] >= 9) & (training['asite'] <= 18))]
             training = training[(training['asite'] >= training['read_length'] / 2 - 1)]
@@ -134,12 +132,11 @@ class processAln(object):
             training = training[((training['asite'] >= 1) & (training['asite'] <= 5))]
         # get nts
         self.nts = pd.read_table(self.ntsFn, header=0)
-        #
         training['pos_-1'] = np.where(training['gene_strand'] == '+', training['start']-1,  training['end'])
         training['pos_0'] = np.where(training['gene_strand'] == '+', training['start'], training['end']-1)
         training['pos_n-1'] = np.where(training['gene_strand'] == '+', training['end']-1, training['start'])
         training['pos_n'] = np.where(training['gene_strand'] == '+', training['end'], training['start']-1)
-        #
+        # merge training with nts
         training = pd.merge(training, self.nts, left_on=["chrom", "pos_-1"], right_on=["chrom", "pos"])
         training.drop(["pos_-1", "pos"], axis=1)
         training.rename(columns={'nt': 'nt_-1'}, inplace=True)
@@ -156,34 +153,31 @@ class processAln(object):
         training = training[["asite", "read_length", "5_offset", "3_offset", "gene_strand", "nt_-1", "nt_0", "nt_n-1", "nt_n"]]
         training.to_csv(path_or_buf=self.prefix + '.training.txt', sep='\t', header=True, index=False)
 
-
-    # @profile
     def makeCdsData(self):
-        ## create pandas df from bedtools intersect
+        # create pandas df from bedtools intersect
         self.bedtool = pbt.BedTool(self.prefix + '.bed')
-        cds = self.bedtool.intersect(self.cds, wa=True, wb=True, sorted=True)
+        cds = self.bedtool.intersect(self.cds, wa=True, wb=True, sorted=True, s=True)
         time = str(datetime.now())
         sys.stderr.write("[status]\tFinished intersecting the bedtool within cds: " + time + "\n")
         colNames = ['chrom', 'start', 'end', 'name', 'read_length', 'strand', 'gene_chrom', 'gene_start', 'gene_end',
                     'gene', 'gene_score', 'gene_strand']
         cds = cds.to_dataframe(names=colNames)
-        ## phasing 5'
+        # phasing 5'
         tmpA = pd.merge(cds, self.posOffsets, left_on=["chrom", "start"], right_on=["chrom","pos"])
         tmpB = pd.merge(cds, self.negOffsets, left_on=["chrom", "end"], right_on=["chrom","pos"])
         cds = pd.concat([tmpA, tmpB])
         cds.rename(columns={'offset':'5_offset'}, inplace=True)
-        ## phasing 3'
+        # phasing 3'
         tmpA = pd.merge(cds, self.posOffsets, left_on=["chrom", "end"], right_on=["chrom","pos"])
         tmpB = pd.merge(cds, self.negOffsets, left_on=["chrom", "start"], right_on=["chrom","pos"])
         cds = pd.concat([tmpA, tmpB])
         cds.rename(columns={'offset':'3_offset'}, inplace=True)
         # get nts
-        #
         cds['pos_-1'] = np.where(cds['gene_strand'] == '+', cds['start']-1,  cds['end'])
         cds['pos_0'] = np.where(cds['gene_strand'] == '+', cds['start'], cds['end']-1)
         cds['pos_n-1'] = np.where(cds['gene_strand'] == '+', cds['end']-1, cds['start'])
         cds['pos_n'] = np.where(cds['gene_strand'] == '+', cds['end'], cds['start']-1)
-        #
+        # merge cds with nt
         cds = pd.merge(cds, self.nts, left_on=["chrom", "pos_-1"], right_on=["chrom", "pos"])
         cds.drop(["pos_-1", "pos"], axis=1, inplace=True)
         cds.rename(columns={'nt': 'nt_-1'}, inplace=True)
@@ -196,8 +190,8 @@ class processAln(object):
         cds = pd.merge(cds, self.nts, left_on=["chrom", "pos_n"], right_on=["chrom", "pos"])
         cds.drop(["pos_n", "pos"], axis=1, inplace=True)
         cds.rename(columns={'nt': 'nt_n'}, inplace=True)
-        ## slice the dataframe to the variables needed for training data
-        cds = cds[["read_length", "5_offset", "3_offset", "gene_strand", "chrom", "start", "end", "nt_-1", "nt_0", "nt_n-1", "nt_n"]]
+        # slice the dataframe to the variables needed for training data
+        cds = cds[["read_length", "5_offset", "3_offset", "gene_strand", "chrom", "start", "end", "nt_-1", "nt_0", "nt_n-1", "nt_n", 'strand']]
         cds.to_csv(path_or_buf=self.prefix + '.cds.txt', sep='\t', header=True, index=False)
 
 
