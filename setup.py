@@ -7,14 +7,14 @@ from distutils.core import setup
 
 setup(
     name='scikit_ribo',
-    version='0.2.0b10',
+    version='0.2.0b11',
     description = 'A scikit framework for joint analysis of Riboseq and RNAseq data',
     long_description=open('README.md').read(),
     url="http://pypi.python.org/pypi/scikit-ribo/",
     author = 'Han Fang',
     author_email = 'hanfang.cshl@gmail.com',
     license='GPLv2',
-    scripts=['scikit-ribo/scikit-ribo-run.py','scikit-ribo/scikit-ribo-build.py'],
+    scripts=['scikit_ribo/scikit-ribo-run.py','scikit_ribo/scikit-ribo-build.py'],
     packages=find_packages(),
     install_requires=['conda>=4.2.13',
                       'colorama>=0.3.7',
