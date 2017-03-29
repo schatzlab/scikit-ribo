@@ -69,10 +69,10 @@ class VisualizeAsite(object):
 class PredictAsite(object):
     ''' model training - a-site prediction
     '''
-    def __init__(self, training=None, cds=None, classifier="rf", RelE=None, pre=None, output=None):
+    def __init__(self, training=None, cds=None, classifier="rf", RelE=None, pre=None, output=None, directory=None):
         self.training = training
         self.cds = cds
-        self.cdsIdxFn = output + "/" + pre + ".codons.df"
+        self.cdsIdxFn = directory + "/" + pre + ".codons.df"
         self.classifier = classifier
         self.RelE = RelE
         self.output = output

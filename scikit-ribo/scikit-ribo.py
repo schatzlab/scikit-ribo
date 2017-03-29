@@ -41,6 +41,7 @@ def log_status(bam, directory, prefix, out):
     :param out: str, output folder, usually sample id
     :return: str * 4
     """
+    print("[status]\tStarted scikit-ribo at " + str(datetime.now()), file=sys.stderr)
     dir_pre = directory + "/" + prefix
     start, cds = dir_pre + ".start.bed", dir_pre + ".cds.bed"
     posIdx, nt = dir_pre + ".pos_ranges.txt", dir_pre + '.nt_table.txt'
@@ -90,7 +91,7 @@ def aln_module(bam, mapQual, minReadLen, maxReadLen, rele, out, start, cds, posI
     return trainingData, cdsData
 
 
-def asite_module(trainingData, cdsData, rele, prefix, out):
+def asite_module(trainingData, cdsData, rele, prefix, out, directory):
     """
     Module of predicting a-site
     :param trainingData: pandas DataFrame
@@ -98,6 +99,7 @@ def asite_module(trainingData, cdsData, rele, prefix, out):
     :param rele: bool, False
     :param prefix: str
     :param out: str, output folder
+    :param directory: str, input folder
     :return: dataFrame
     """
     # silent
@@ -112,7 +114,8 @@ def asite_module(trainingData, cdsData, rele, prefix, out):
     # predict a-site
     print("[execute]\tstart the process of a-site prediction", file=sys.stderr)
     classifier = "rf"
-    model = PredictAsite(trainingData, cdsData, classifier, rele, prefix, out)
+    print(directory)
+    model = PredictAsite(trainingData, cdsData, classifier, rele, prefix, out, directory)
     print("[execute]\tperform model training and cross validation on the training data", file=sys.stderr)
     model.rfFit()
     print("[execute]\tplotting the bar plot of the feature importance", file=sys.stderr)
@@ -175,14 +178,12 @@ def scikit_ribo(bam, directory, prefix, mapQual, minReadLen, maxReadLen, rele, o
     :param unmap: str, un-mappable file
     :return: None
     """
-    print("[status]\tStarted scikit-ribo at " + str(datetime.now()), file=sys.stderr)
-    sys.stderr.flush()
     # log status
     start, cds, posIdx, nt = log_status(bam, directory, prefix, out)
     # load data
     trainingData, cdsData = aln_module(bam, mapQual, minReadLen, maxReadLen, rele, out, start, cds, posIdx, nt)
     # predict a-site
-    dataFrame = asite_module(trainingData, cdsData, rele, prefix, out)
+    dataFrame = asite_module(trainingData, cdsData, rele, prefix, out, directory)
     # model te
     te_module(dataFrame, unmap, out)
     # Finish
