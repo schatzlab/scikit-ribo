@@ -16,11 +16,13 @@ conda>=4.2.13, colorama>=0.3.7, glmnet-python>=0.1, gffutils>=0.8.7.1, matplotli
 ## Install
 
 First, install glmnet_python
+
     git clone https://github.com/hanfang/glmnet_python.git
     cd glmnet_python
     python setup.py install
 
 Second, install `scikit-ribo`
+    
     pip install scikit-ribo
 
 ## Usage
