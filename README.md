@@ -2,7 +2,7 @@
 
 # *scikit-ribo* 
 
-A scikit framework for joint analysis of Riboseq and RNAseq data
+### - A scikit framework for joint analysis of Riboseq and RNAseq data
 --------
 
 ## Contact
