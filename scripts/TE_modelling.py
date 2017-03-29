@@ -42,7 +42,7 @@ class modelTE(object):
         :param tpmLB:
         """
         self.fn = fn
-        self.unMappableFn = unMappableFn # add this as option
+        self.unMappableFn = unMappableFn
         self.tpmLB = tpmLB
         self.unMappable = None
         self.df = None
@@ -64,6 +64,7 @@ class modelTE(object):
         self.df = pd.merge(self.df, codonLen, how="left", on=["gene"])
         self.df.rename(columns={'pair_prob': 'downstreamSL'}, inplace=True)
         self.df = self.df.dropna()
+        self.df = self.df[(self.df["ribosome_count"] > 0)] # check me
 
     def filterDf(self):
         """
@@ -72,9 +73,10 @@ class modelTE(object):
         """
         # get a summary of the starting df
         sys.stderr.write("[status]\tStarting number of observations:\t" + str(self.df.shape[0]) + "\n")
-        sys.stderr.write("[status]\tNumber of variables:\t" + str(self.df.shape[1]-1) + "\n")
-        # 1. exclude 5/3 utr codons
-        self.df = self.df[(self.df["codon_idx"] <= self.df["numCodons"]) & (self.df["codon_idx"] >= 1)]
+        sys.stderr.write("[status]\tTPM lower bound:\t" + str(self.tpmLB) + "\n")
+        # 1. exclude 5/3 utr codons, stop codons: TAG, TAA, TGA
+        self.df = self.df[(self.df["codon_idx"] <= self.df["numCodons"]) & (self.df["codon_idx"] > 0)]
+        self.df = self.df[((self.df["codon"] != 'TAG') & (self.df["codon"] != 'TAA') & (self.df["codon"] != 'TGA'))]
         # 2. exclude genes w/ low Ribo TPM
         genes = self.df[["gene", "codon_idx", "ribosome_count"]].groupby("gene").sum().ribosome_count.reset_index(name="riboCnt")
         codonLen = self.df[["gene", "numCodons"]].drop_duplicates(subset=["gene"])
@@ -95,11 +97,8 @@ class modelTE(object):
         geneFilter["keep"] = np.where(geneFilter.remained > 10, True, False)
         geneFilter = geneFilter[(geneFilter["keep"] == True)][['gene']]
         self.df = pd.merge(self.df, geneFilter, how="inner", on=["gene"])
-        # 6. exclude stop codons: TAG, TAA, TGA
-        self.df = self.df[((self.df["codon"] != 'TAG') & (self.df["codon"] != 'TAA') & (self.df["codon"] != 'TGA'))]
-        numGenes = np.unique(self.df.gene).shape[0]
         # summary statistics of the data-frame
-        sys.stderr.write("[status]\tTPM lower bound:\t" + str(self.tpmLB) + "\n")
+        numGenes = np.unique(self.df.gene).shape[0]
         sys.stderr.write("[status]\tNumber of observations after filtering:\t" + str(self.df.shape[0]) + "\n")
         sys.stderr.write("[status]\tNumber of genes after filtering:\t" + str(numGenes) + "\n")
 
@@ -114,8 +113,6 @@ class modelTE(object):
         tmp["logTPM_scaled"] = (tmp['logTPM'] - np.mean(tmp['logTPM'])) / np.std(tmp['logTPM'])
         tmp.drop(["logTPM", "TPM"], axis=1, inplace=True)
         self.df = pd.merge(self.df, tmp, how='left', on=["gene"])
-        # variable scaling
-        # self.df["avgProb_scaled"] = (self.df["avg_prob"] - np.mean(self.df["avg_prob"])) / np.std(self.df["avg_prob"])
         # remove unnecessary cols and NAs
         self.df = self.df.drop(["TPM", "numCodons"], axis=1).dropna() # avg_prob
 
@@ -144,8 +141,6 @@ class modelTE(object):
         cateVarsNames = list(cateVars.columns.values)
         varsNames = cateVarsNames + ["secondary_structure"]
         # prepare input arrays
-        # avgProb = self.df["avgProb_scaled"]
-        # avgProbArr = np.array(avgProb.as_matrix().reshape(len(avgProb), 1), dtype=np.float64)
         cateVars = dataprocess().sparseDf(cateVars)
         downstreamSL = np.array(self.df["downstreamSL"].as_matrix().reshape(len(self.df["downstreamSL"]), 1), dtype=np.float64)
         X = sparse.hstack([cateVars, downstreamSL], format="csc", dtype=np.float64)

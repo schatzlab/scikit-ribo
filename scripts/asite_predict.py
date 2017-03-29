@@ -203,7 +203,7 @@ class trainModel(object):
         cdsIdx = pd.read_table(self.cdsIdxFn, header=0)
         riboCnt = pd.merge(cdsIdx, cnt, how="left", left_on=["chrom", "start", "end", "gene_strand"],
                            right_on=["chrom", "a_start", "a_end", "strand"])
-        riboCnt.drop(['a_start', 'a_end'], axis=1, inplace=True)
+        riboCnt.drop(['a_start', 'a_end', 'strand'], axis=1, inplace=True)
         riboCnt["ribosome_count"].fillna(value=0, inplace=True)
         riboCnt["ribosome_count"] = riboCnt["ribosome_count"].astype(int)
         riboCnt = riboCnt.sort_values(by=["chrom", "start", "end"])
