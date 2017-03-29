@@ -2,8 +2,11 @@
 import os, sys
 #from numpy.distutils.core import setup, Extension
 from setuptools import find_packages
-
 from distutils.core import setup
+
+if sys.version_info.major != 3:
+    sys.exit("scikit-ribo can only be used with Python 3. You are currently "
+             "running Python %d." % sys.version_info.major)
 
 setup(
     name='scikit_ribo',
@@ -38,6 +41,7 @@ setup(
         'License :: OSI Approved :: GNU General Public License v2 (GPLv2)',
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.4',
+        'Operating System :: Unix',
                 ],
     keywords='bioinformatics genomics glm glmnet ridge riboseq',
         )
