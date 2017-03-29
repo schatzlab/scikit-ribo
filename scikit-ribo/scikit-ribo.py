@@ -27,27 +27,28 @@ from asite_predict import VisualizeAsite
 from asite_predict import PredictAsite
 from model_te import ModelTE
 from colorama import init
-init(strip=not sys.stdout.isatty())
 from termcolor import cprint
 from pyfiglet import figlet_format
+init(strip=not sys.stdout.isatty())
 
 
-def log_status(inBam, folder, pre, output):
+def log_status(bam, directory, prefix, out):
     """
-    load data, log status and start
-    :param inBam:
-    :param output:
-    :param pre:
-    :return:
+    Load data, log status and start
+    :param bam: str, input bam file
+    :param directory: str, folder to pre-built files
+    :param prefix: str, prefix for pre-built files
+    :param out: str, output folder, usually sample id
+    :return: str * 4
     """
-    dir_pre = folder + "/" + pre
+    dir_pre = directory + "/" + prefix
     start, cds = dir_pre + ".start.bed", dir_pre + ".cds.bed"
     posIdx, nt = dir_pre + ".pos_ranges.txt", dir_pre + '.nt_table.txt'
     # create folder
-    cmd = 'mkdir -p ' + output
+    cmd = 'mkdir -p ' + out
     os.system(cmd)
-    print("[status]\tProcessing the input bam file: " + inBam, file=sys.stderr)
-    print("[status]\tOutput path: " + output, file=sys.stderr)
+    print("[status]\tProcessing the input bam file: " + bam, file=sys.stderr)
+    print("[status]\tOutput path: " + out, file=sys.stderr)
     print("[status]\tReading the start codon BED file: " + start, file=sys.stderr)
     print("[status]\tReading the open reading frame codon BED file: " + cds, file=sys.stderr)
     print("[status]\tReading the position-phase file: " + posIdx, file=sys.stderr)
@@ -55,24 +56,25 @@ def log_status(inBam, folder, pre, output):
     sys.stderr.flush()
     return start, cds, posIdx, nt
 
-def aln_module(inBam, mapq, minRL, maxRL, RelE, output, start, cds, posIdx, nt):
-    """
 
-    :param inBam:
-    :param mapq:
-    :param output:
-    :param minRL:
-    :param maxRL:
+def aln_module(bam, mapQual, minReadLen, maxReadLen, rele, out, start, cds, posIdx, nt):
+    """
+    Module of alignment process
+    :param bam: str, bam
+    :param mapQual: int, 20
+    :param minReadLen: int, 15
+    :param maxReadLen: int, 35
+    :param rele: bool, False
+    :param out: str, output directory
     :param start:
     :param cds:
     :param posIdx:
-    :param RelE:
     :param nt:
-    :return:
+    :return: pandas DataFrame * 2
     """
-    print("[execute]\tKeep reads with length range: [" + str(minRL) + "," + str(maxRL) + "]", file=sys.stderr)
+    print("[execute]\tKeep reads with length range: [" + str(minReadLen) + "," + str(maxReadLen) + "]", file=sys.stderr)
     print("[execute]\tMinimum mapq allowed: " + str(mapq), file=sys.stderr)
-    aln = BamProcess(inBam, mapq, minRL, maxRL, RelE, output, start, cds, posIdx, nt)
+    aln = BamProcess(bam, mapQual, minReadLen, maxReadLen, rele, out, start, cds, posIdx, nt)
     print("[execute]\tFiltering out overlapping regions", file=sys.stderr)
     aln.filterRegion()
     print("[execute]\tImporting the position ranges", file=sys.stderr)
@@ -87,15 +89,16 @@ def aln_module(inBam, mapq, minRL, maxRL, RelE, output, start, cds, posIdx, nt):
     sys.stderr.flush()
     return trainingData, cdsData
 
-def asite_module(trainingData, cdsData, RelE, pre, output):
-    """
 
-    :param trainingData:
-    :param cdsData:
-    :param RelE:
-    :param pre:
-    :param output:
-    :return:
+def asite_module(trainingData, cdsData, rele, prefix, out):
+    """
+    Module of predicting a-site
+    :param trainingData: pandas DataFrame
+    :param cdsData: pandas DataFrame
+    :param rele: bool, False
+    :param prefix: str
+    :param out: str, output folder
+    :return: dataFrame
     """
     # silent
     def warn(*args, **kwargs):
@@ -104,12 +107,12 @@ def asite_module(trainingData, cdsData, RelE, pre, output):
     warnings.warn = warn
     # plot
     print("[execute]\tPlotting the a-site location distribution", file=sys.stderr)
-    trainingDist = VisualizeAsite(trainingData, RelE, output)
+    trainingDist = VisualizeAsite(trainingData, rele, out)
     trainingDist.plot()
     # predict a-site
     print("[execute]\tstart the process of a-site prediction", file=sys.stderr)
     classifier = "rf"
-    model = PredictAsite(trainingData, cdsData, classifier, RelE, pre, output)
+    model = PredictAsite(trainingData, cdsData, classifier, rele, prefix, out)
     print("[execute]\tperform model training and cross validation on the training data", file=sys.stderr)
     model.rfFit()
     print("[execute]\tplotting the bar plot of the feature importance", file=sys.stderr)
@@ -123,20 +126,21 @@ def asite_module(trainingData, cdsData, RelE, pre, output):
     sys.stderr.flush()
     return dataFrame
 
-def te_module(dataFrame, unmap_fn, output):
-    """
 
-    :param dataFrame:
-    :param unmap_fn:
-    :param output:
-    :return:
+def te_module(dataFrame, unmap, out):
+    """
+    Module of inferring translation efficiency
+    :param dataFrame: dataFrame
+    :param unmap: str, un-mappable region
+    :param out: str
+    :return: None
     """
     # silent
     def warn(*args, **kwargs):
         pass
     import warnings
     warnings.warn = warn
-    if unmap_fn:
+    if unmap:
         print("[status]\tReading the un-mappable regions: " + str(args.u), file=sys.stderr)
     else:
         print("[status]\tThe list of un-mappable regions was not provided", file=sys.stderr)
@@ -144,7 +148,7 @@ def te_module(dataFrame, unmap_fn, output):
     tpmLB = 1
     # start model fitting
     print("[execute]\tStart the modelling of translation efficiency (TE)", file=sys.stderr)
-    mod = ModelTE(dataFrame, unmap_fn, output, tpmLB)
+    mod = ModelTE(dataFrame, unmap, out, tpmLB)
     print("[execute]\tLoading data", file=sys.stderr)
     mod.loadDat()
     print("[execute]\tFiltering the df", file=sys.stderr)
@@ -156,29 +160,31 @@ def te_module(dataFrame, unmap_fn, output):
     mod.glmnetFit(X, y, offsets, numCodons, numGenes, varsNames, lambda_min)
     sys.stderr.flush()
 
-def scikit_ribo(inBam, folder, pre, mapq, minRL, maxRL, RelE, output, unmap_fn):
-    """
 
-    :param inBam:
-    :param pre:
-    :param mapq:
-    :param minRL:
-    :param maxRL:
-    :param RelE:
-    :param output:
-    :param unmap_fn:
-    :return:
+def scikit_ribo(bam, directory, prefix, mapQual, minReadLen, maxReadLen, rele, out, unmap):
+    """
+    Wrapper master function
+    :param bam: str, bam file location
+    :param directory: str, input directory
+    :param prefix: str, prefix
+    :param mapQual: int, 20
+    :param minReadLen: int, 15
+    :param maxReadLen: int, 35
+    :param rele: bool, False
+    :param out: str, output folder
+    :param unmap: str, un-mappable file
+    :return: None
     """
     print("[status]\tStarted scikit-ribo at " + str(datetime.now()), file=sys.stderr)
     sys.stderr.flush()
     # log status
-    start, cds, posIdx, nt = log_status(inBam, folder, pre, output)
+    start, cds, posIdx, nt = log_status(bam, directory, prefix, out)
     # load data
-    trainingData, cdsData = aln_module(inBam, mapq, minRL, maxRL, RelE, output, start, cds, posIdx, nt)
+    trainingData, cdsData = aln_module(bam, mapQual, minReadLen, maxReadLen, rele, out, start, cds, posIdx, nt)
     # predict a-site
-    dataFrame = asite_module(trainingData, cdsData, RelE, pre, output)
+    dataFrame = asite_module(trainingData, cdsData, rele, prefix, out)
     # model te
-    te_module(dataFrame, unmap_fn, output)
+    te_module(dataFrame, unmap, out)
     # Finish
     print("[status]\tScikit-ribo finished at " + str(datetime.now()), file=sys.stderr)
     sys.stderr.flush()
@@ -210,9 +216,9 @@ if __name__ == '__main__':
         cprint(figlet_format('scikit-ribo', font='ogre'), 'green', attrs=['bold'])
         args = parser.parse_args()
     # process the file if the input files exist
-    if (args.i != None and args.f != None and args.p != None and args.o != None):
+    if args.i != None and args.f != None and args.p != None and args.o != None:
         # specify inputs
-        inBam = args.i
+        input_bam = args.i
         folder = args.f
         pre = args.p
         mapq = args.q
@@ -220,7 +226,7 @@ if __name__ == '__main__':
         RelE = args.r
         output = args.o
         unmap_fn = args.u
-        scikit_ribo(inBam, folder, pre, mapq, minRL, maxRL, RelE, output, unmap_fn)
+        scikit_ribo(input_bam, folder, pre, mapq, minRL, maxRL, RelE, output, unmap_fn)
     else:
         print("[error]\tmissing argument", file=sys.stderr)
         parser.print_usage()
