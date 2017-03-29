@@ -26,11 +26,12 @@ Second, install `scikit-ribo`
     pip install scikit-ribo
 
 ## Usage
-    Twp steps:
 
-    	Build index: `scikit-ribo-build.py`
+Twp steps:
 
-    	Fit model:   `scikit-ribo.py`
+- Build index: `scikit-ribo-build.py`
+
+- Fit model:   `scikit-ribo.py`
 
     scikit-ribo-build.py -g gtf-file -f fasta-file -p prefix -r rna-fold-folder -t TPM-file -o index-path
 
