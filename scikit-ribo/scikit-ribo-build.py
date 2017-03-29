@@ -22,9 +22,10 @@ import numpy as np
 import csv
 import errno
 from datetime import datetime
-from gtf_preprocess import gtf_preprocess
-from process_rnafold import process_rnafold
-from merge_df import merge_df
+import scikit_ribo
+from gtf_preprocess import GtfPreProcess
+from process_rnafold import ProcessRnafold
+from merge_df import MergeDF
 
 
 def log_status(gtf_fn, ref_fn, prefix, rnafold_dir, tpm_fn, out_dir):
@@ -40,12 +41,13 @@ def log_status(gtf_fn, ref_fn, prefix, rnafold_dir, tpm_fn, out_dir):
     # create output folder
     cmd = 'mkdir -p ' + out_dir
     os.system(cmd)
-    print("[status]\tReading the gtf file: " + gtf_fn, file=sys.stderr)
-    print("[status]\tReading the ref genome fasta file: " + ref_fn, file=sys.stderr)
-    print("[status]\tRNAfold folder: " + rnafold_dir, file=sys.stderr)
-    print("[status]\tTPM file of RNAseq sample: " + tpm_fn, file=sys.stderr)
-    print("[status]\tPrefix to use: " + prefix, file=sys.stderr)
-    print("[status]\tOutput path: " + out_dir, file=sys.stderr)
+    print("[status]\tStarted the pre-processing module", file=sys.stderr)
+    print("[status]\tImport the gtf file: " + gtf_fn, file=sys.stderr)
+    print("[status]\tImport the ref genome fasta file: " + ref_fn, file=sys.stderr)
+    print("[status]\tImport RNAfold folder: " + rnafold_dir, file=sys.stderr)
+    print("[status]\tImport TPM file of RNAseq sample: " + tpm_fn, file=sys.stderr)
+    print("[setting]\tPrefix to use: " + prefix, file=sys.stderr)
+    print("[setting]\tOutput path: " + out_dir, file=sys.stderr)
     sys.stderr.flush()
 
 
@@ -58,8 +60,7 @@ def module_gtf(gtf_fn, ref_fn, prefix, out_dir):
     :param out_dir: str
     :return: None
     """
-    print("[status]\tStarted the pre-processing module", file=sys.stderr)
-    worker = gtf_preprocess(gtf_fn, ref_fn, prefix, out_dir)
+    worker = GtfPreProcess(gtf_fn, ref_fn, prefix, out_dir)
     print("[execute]\tLoading the the gtf file in to sql db", file=sys.stderr)
     worker.convertGtf()
     print("[execute]\tCalculating the length of each chromosome", file=sys.stderr)
@@ -86,7 +87,7 @@ def module_rnafold(rnafold_dir, prefix, output_dir):
     :return:
     """
     fasta = output_dir + "/" + prefix + ".expandCDS.fasta"
-    rna = process_rnafold(fasta, rnafold_dir, output_dir)
+    rna = ProcessRnafold(fasta, rnafold_dir, prefix, output_dir)
     print("[status]\tParsing fasta file", file=sys.stderr)
     rna.loadFa()
     print("[status]\tParsing the pairing probability file", file=sys.stderr)
@@ -106,16 +107,17 @@ def module_merge(prefix, tpm_fn, out_dir):
     :return:
     """
     bed = out_dir + "/" + prefix + ".codons.bed"
-    rnafold = out_dir + "/" + "rnafold.txt"
+    rnafold = out_dir + "/" + prefix + ".rnafold_lbox.txt"
     tpm = tpm_fn
     ## execute
-    dat = merge_df(bed, rnafold, tpm, out_dir)
-    print("[execute]\tTransforming the dataframe of RNA 2' structure pairing probabilities", file=sys.stderr)
+    dat = MergeDF(bed, rnafold, tpm, out_dir)
+    print("[execute]\tTransforming the dataframe of RNA secondary structure pairing probabilities", file=sys.stderr)
     dat.transformPairProb()
     print("[execute]\tLoading tpm", file=sys.stderr)
     dat.loadTpm()
     print("[execute]\tMerging all the df together", file=sys.stderr)
     dat.mergeDf()
+    sys.stderr.flush()
 
 
 def scikit_ribo_build(gtf_fn, ref_fn, prefix, rnafold_dir, tpm_fn, out):

@@ -17,7 +17,6 @@ import argparse
 import scipy
 import pandas as pd
 import numpy as np
-from patsy import dmatrices
 import pybedtools as pbt
 from scipy import sparse
 import matplotlib
@@ -142,10 +141,11 @@ class ModelTE(object):
         varsNames = cateVarsNames + ["secondary_structure"]
         # prepare input arrays
         cateVars = dataprocess().sparseDf(cateVars)
-        downstreamSL = np.array(self.df["downstreamSL"].as_matrix().reshape(len(self.df["downstreamSL"]), 1), dtype=np.float64)
+        downstreamSL = np.array(self.df["downstreamSL"].as_matrix().reshape(int(len(self.df["downstreamSL"])), 1),
+                                dtype=np.float64)
         X = sparse.hstack([cateVars, downstreamSL], format="csc", dtype=np.float64)
         y = np.array(self.df["ribosome_count"], dtype=np.float64)
-        offsets = np.array(self.df["logTPM_scaled"], dtype=np.float64).reshape(len(self.df["logTPM_scaled"]), 1)
+        offsets = np.array(self.df["logTPM_scaled"], dtype=np.float64).reshape(int(len(self.df["logTPM_scaled"])), 1)
         return X, y, offsets, numCodons, numGenes, varsNames
 
     def glmnetFit(self, X, y, offsets, numCodons, numGenes, varsNames, lambda_min):

@@ -22,6 +22,7 @@ import numpy as np
 import csv
 import errno
 from datetime import datetime
+import scikit_ribo
 from bam_process import BamProcess
 from asite_predict import VisualizeAsite
 from asite_predict import PredictAsite
@@ -32,30 +33,36 @@ from pyfiglet import figlet_format
 init(strip=not sys.stdout.isatty())
 
 
-def log_status(bam, directory, prefix, out):
+def log_status(bam, directory, prefix, out, cv):
     """
     Load data, log status and start
     :param bam: str, input bam file
     :param directory: str, folder to pre-built files
     :param prefix: str, prefix for pre-built files
     :param out: str, output folder, usually sample id
+    :param cv: bool, cross-validation flag
     :return: str * 4
     """
     print("[status]\tStarted scikit-ribo at " + str(datetime.now()), file=sys.stderr)
     dir_pre = directory + "/" + prefix
     start, cds = dir_pre + ".start.bed", dir_pre + ".cds.bed"
     posIdx, nt = dir_pre + ".pos_ranges.txt", dir_pre + '.nt_table.txt'
+    lambda_min = 0.13 if not cv else None
     # create folder
     cmd = 'mkdir -p ' + out
     os.system(cmd)
     print("[status]\tProcessing the input bam file: " + bam, file=sys.stderr)
-    print("[status]\tOutput path: " + out, file=sys.stderr)
+    print("[setting]\tOutput path: " + out, file=sys.stderr)
     print("[status]\tReading the start codon BED file: " + start, file=sys.stderr)
     print("[status]\tReading the open reading frame codon BED file: " + cds, file=sys.stderr)
     print("[status]\tReading the position-phase file: " + posIdx, file=sys.stderr)
     print("[status]\tReading the nt table file: " + nt, file=sys.stderr)
+    if lambda_min:
+        print("[setting]\tpre-defined lambda: " + str(lambda_min), file=sys.stderr)
+    else:
+        print("[setting]\tCross-validation on glmnet enabled", file=sys.stderr)
     sys.stderr.flush()
-    return start, cds, posIdx, nt
+    return start, cds, posIdx, nt, lambda_min
 
 
 def aln_module(bam, mapQual, minReadLen, maxReadLen, rele, out, start, cds, posIdx, nt):
@@ -73,8 +80,8 @@ def aln_module(bam, mapQual, minReadLen, maxReadLen, rele, out, start, cds, posI
     :param nt:
     :return: pandas DataFrame * 2
     """
-    print("[execute]\tKeep reads with length range: [" + str(minReadLen) + "," + str(maxReadLen) + "]", file=sys.stderr)
-    print("[execute]\tMinimum mapq allowed: " + str(mapq), file=sys.stderr)
+    print("[setting]\tKeep reads with length range: [" + str(minReadLen) + "," + str(maxReadLen) + "]", file=sys.stderr)
+    print("[setting]\tMinimum mapq allowed: " + str(mapq), file=sys.stderr)
     aln = BamProcess(bam, mapQual, minReadLen, maxReadLen, rele, out, start, cds, posIdx, nt)
     print("[execute]\tFiltering out overlapping regions", file=sys.stderr)
     aln.filterRegion()
@@ -130,7 +137,7 @@ def asite_module(trainingData, cdsData, rele, prefix, out, directory):
     return dataFrame
 
 
-def te_module(dataFrame, unmap, out):
+def te_module(dataFrame, unmap, out, lambda_min):
     """
     Module of inferring translation efficiency
     :param dataFrame: dataFrame
@@ -147,7 +154,6 @@ def te_module(dataFrame, unmap, out):
         print("[status]\tReading the un-mappable regions: " + str(args.u), file=sys.stderr)
     else:
         print("[status]\tThe list of un-mappable regions was not provided", file=sys.stderr)
-    lambda_min = None
     tpmLB = 1
     # start model fitting
     print("[execute]\tStart the modelling of translation efficiency (TE)", file=sys.stderr)
@@ -164,7 +170,7 @@ def te_module(dataFrame, unmap, out):
     sys.stderr.flush()
 
 
-def scikit_ribo(bam, directory, prefix, mapQual, minReadLen, maxReadLen, rele, out, unmap):
+def scikit_ribo(bam, directory, prefix, mapQual, minReadLen, maxReadLen, rele, out, unmap, cv):
     """
     Wrapper master function
     :param bam: str, bam file location
@@ -179,13 +185,13 @@ def scikit_ribo(bam, directory, prefix, mapQual, minReadLen, maxReadLen, rele, o
     :return: None
     """
     # log status
-    start, cds, posIdx, nt = log_status(bam, directory, prefix, out)
+    start, cds, posIdx, nt, lambda_min = log_status(bam, directory, prefix, out, cv)
     # load data
     trainingData, cdsData = aln_module(bam, mapQual, minReadLen, maxReadLen, rele, out, start, cds, posIdx, nt)
     # predict a-site
     dataFrame = asite_module(trainingData, cdsData, rele, prefix, out, directory)
     # model te
-    te_module(dataFrame, unmap, out)
+    te_module(dataFrame, unmap, out, lambda_min)
     # Finish
     print("[status]\tScikit-ribo finished at " + str(datetime.now()), file=sys.stderr)
     sys.stderr.flush()
@@ -201,6 +207,7 @@ if __name__ == '__main__':
     parser.add_argument("-q", help="minimum mapQ allowed, Default: 20", default=20, type=int)
     parser.add_argument("-s", help="Shortest read length allowed, Default: 10", default=10, type=int)
     parser.add_argument("-l", help="Longest read length allowed, Default: 35", default=35, type=int)
+    parser.add_argument("-c", help="enable cross validation for glmnet", action='store_true')
     parser.add_argument("-r", help="setting this flag will enable the RelE mode", action='store_true')
     parser.add_argument("-u", help="Un-mappable regions", default=None)
     parser.add_argument("-o", help="Output path, recommend using the sample id")
@@ -224,10 +231,11 @@ if __name__ == '__main__':
         pre = args.p
         mapq = args.q
         minRL, maxRL = args.s, args.l
+        cv = args.c
         RelE = args.r
         output = args.o
         unmap_fn = args.u
-        scikit_ribo(input_bam, folder, pre, mapq, minRL, maxRL, RelE, output, unmap_fn)
+        scikit_ribo(input_bam, folder, pre, mapq, minRL, maxRL, RelE, output, unmap_fn, cv)
     else:
         print("[error]\tmissing argument", file=sys.stderr)
         parser.print_usage()

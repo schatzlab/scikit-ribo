@@ -23,7 +23,7 @@ import pandas as pd
 from itertools import groupby
 
 
-class callRnafold(object):
+class CallRnafold(object):
     ''' Run RNAfold in parallel
     '''
     def __init__(self, fastaFn, rnafold):
@@ -64,7 +64,7 @@ class callRnafold(object):
 if __name__ == '__main__':
     fasta = sys.argv[1]
     rnafold = sys.argv[2]
-    worker = callRnafold(fasta, rnafold)
+    worker = CallRnafold(fasta, rnafold)
     worker.fastaIter()
     worker.splitFa()
     worker.runAll()

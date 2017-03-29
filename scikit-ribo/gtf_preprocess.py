@@ -24,7 +24,7 @@ from pybedtools.featurefuncs import gff2bed
 from itertools import groupby
 
 
-class gtf_preprocess(object):
+class GtfPreProcess(object):
     ''' class to sort and get start codon from a gtf file
     '''
     def __init__(self, gtf=None, fasta=None, prefix=None, output=None):
@@ -261,7 +261,7 @@ if __name__ == '__main__':
         os.system(cmd)
         ## execute
         sys.stderr.write("[execute]\tStarting the pre-processing module" + "\n")
-        worker = gtf_preprocess(gtf, ref, output)
+        worker = GtfPreProcess(gtf, ref, output)
         sys.stderr.write("[execute]\tLoading the the gtf file in to sql db" + "\n")
         worker.convertGtf()
         sys.stderr.write("[execute]\tCalculating the length of each chromosome" + "\n")

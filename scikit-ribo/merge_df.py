@@ -23,7 +23,7 @@ from pybedtools.featurefuncs import gff2bed
 from itertools import groupby
 
 
-class merge_df(object):
+class MergeDF(object):
     ''' class to sort and get start codon from a gtf file
     '''
 
@@ -110,7 +110,7 @@ if __name__ == '__main__':
         os.system(cmd)
         ## execute
         sys.stderr.write("[execute]\tStarting the pre-processing module" + "\n")
-        dat = merge_df(fn, pairprob, tpm, output)
+        dat = MergeDF(fn, pairprob, tpm, output)
         sys.stderr.write("[execute]\tTransforming the dataframe of RNA 2' structure pairing probabilities" + "\n")
         dat.transformPairProb()
         sys.stderr.write("[execute]\tLoading tpm" + "\n")

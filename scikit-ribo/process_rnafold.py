@@ -21,12 +21,13 @@ import multiprocessing
 from collections import defaultdict
 import pandas as pd
 
-class process_rnafold(object):
+class ProcessRnafold(object):
     ''' process rnafold outputs
     '''
-    def __init__(self, fa, input, output):
+    def __init__(self, fa, input, prefix, output):
         self.fa = fa
         self.input = input
+        self.prefix = prefix
         self.output = output
         self.lenDf = None
         self.header = None
@@ -135,13 +136,13 @@ class process_rnafold(object):
 
     def mergeAll(self):
         # write lbox
-        csvFile = open(self.output + '/rnafold.txt', 'w')
+        lboxFile = open(self.output + '/' + self.prefix + '.rnafold_lbox.txt', 'w')
         for k, v in self.probDic.items():
             lbox = v[0]
-            csvFile.write(k + "\t" + " ".join(str(i) for i in lbox) + "\n")
-        csvFile.close()
+            lboxFile.write(k + "\t" + " ".join(str(i) for i in lbox) + "\n")
+        lboxFile.close()
         # write ubox
-        uboxFile = open(self.output + '/rnafold_ubox.txt', 'w')
+        uboxFile = open(self.output + '/' + self.prefix + '.rnafold_ubox.txt', 'w')
         for k, v in self.probDic.items():
             ubox = v[1]
             uboxFile.write(k + "\t" + " ".join(str(i) for i in ubox) + "\n")
@@ -169,7 +170,7 @@ if __name__ == '__main__':
         input = args.i
         output = args.o
         #
-        rna = process_rnafold(fasta, input, output)
+        rna = ProcessRnafold(fasta, input, output)
         sys.stderr.write("[status]\tParsing fasta file" + "\n")
         rna.loadFa()
         sys.stderr.write("[status]\tParsing the pairing probability file" + "\n")
