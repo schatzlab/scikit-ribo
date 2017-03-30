@@ -81,8 +81,11 @@ class figures(object):
     def plotAllGenes(self):
         # loop over all genes and plot
         geneNames = set(self.riboDf["gene"])
-        pool = multiprocessing.Pool(multiprocessing.cpu_count())
-        pool.map(self.plotCoverageOnGene, geneNames)
+        cpus = 16 if multiprocessing.cpu_count() > 16 else max(1, multiprocessing.cpu_count() - 1)
+        pool = multiprocessing.Pool(cpus, maxtasksperchild=2)
+        pool.apply_async(self.plotCoverageOnGene, geneNames)
+        pool.close()
+        pool.join()
         sys.stderr.write("[status]\tFinished plotting all genes" + "\n")
 
 

@@ -53,8 +53,11 @@ class CallRnafold(object):
 
     def runAll(self):
         geneNames = self.fastaDic.keys()
-        pool = multiprocessing.Pool(multiprocessing.cpu_count())
-        pool.map(self.callRnafold, geneNames)
+        cpus = 16 if multiprocessing.cpu_count() > 16 else max(1, multiprocessing.cpu_count() - 1)
+        pool = multiprocessing.Pool(cpus, maxtasksperchild=2)
+        pool.apply_async(self.callRnafold, geneNames)
+        pool.close()
+        pool.join()
         print("[status]\tFinished calling rnafold for all.", flush=True)
     
     def rmTmpFa(self):
