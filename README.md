@@ -13,17 +13,30 @@ hanfang.cshl@gmail.com
 ## Requirement: 
 Environment: Python3, Linux
 Dependencies:
-conda>=4.2.13, colorama>=0.3.7, glmnet-python>=0.1, gffutils>=0.8.7.1, matplotlib>=1.5.1, numpy>=1.11.2, pandas>=0.19.2, pybedtools>=0.7.8, pyfiglet>=0.7.5, pysam>=0.9.1.4, scikit-learn>=0.18, scipy>=0.18.1, seaborn>=0.7.0, termcolor>=1.1.0\
+bedtools >= 2.26.0
+
+When using `pip install scikit-ribo`, all the following dependencies will be pulled and installed automatically.
+
+| Python package| Version >= |
+| ------------- |:-------------:|
+| conda | 4.2.13 |
+| colorama | 0.3.7 |
+| glmnet-py | 0.1.0b |
+| gffutils | 0.8.7.1 |
+| matplotlib | 1.5.1 |
+| numpy | 1.11.2 |
+| pandas | 0.19.2 |
+| pybedtools | 0.7.8 | 
+| pyfiglet | 0.7.5 | 
+| pysam | 0.9.1.4 |
+| scikit-learn | 0.18 |
+| scipy | 0.18.1 |
+| seaborn | 0.7.0 |
+| termcolor | 1.1.0 |
 
 ## Install
 
-First, install glmnet_python
-
-    git clone https://github.com/hanfang/glmnet_python.git
-    cd glmnet_python
-    python setup.py install
-
-Second, install `scikit-ribo`
+Install `scikit-ribo`
     
     pip install scikit-ribo
 
