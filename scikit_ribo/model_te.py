@@ -22,13 +22,13 @@ from scipy import sparse
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-import glmnet_python.glmnet as glmnet
-import glmnet_python.dataprocess as dataprocess
-import glmnet_python.glmnetCoef as glmnetCoef
-import glmnet_python.cvglmnet as cvglmnet
-import glmnet_python.cvglmnetCoef as cvglmnetCoef
-import glmnet_python.cvglmnetPlot as cvglmnetPlot
-import glmnet_python.cvglmnetPredict as cvglmnetPredict
+import glmnet_py.glmnet as glmnet
+import glmnet_py.dataprocess as dataprocess
+import glmnet_py.glmnetCoef as glmnetCoef
+import glmnet_py.cvglmnet as cvglmnet
+import glmnet_py.cvglmnetCoef as cvglmnetCoef
+import glmnet_py.cvglmnetPlot as cvglmnetPlot
+import glmnet_py.cvglmnetPredict as cvglmnetPredict
 
 
 class ModelTE(object):

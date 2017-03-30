@@ -10,7 +10,7 @@ if sys.version_info.major != 3:
 
 setup(
     name='scikit_ribo',
-    version='0.2.0b14',
+    version='0.2.1b2',
     description = 'A scikit framework for joint analysis of Riboseq and RNAseq data',
     long_description=open('README.md').read(),
     url="https://github.com/hanfang/scikit-ribo",
@@ -22,6 +22,7 @@ setup(
     install_requires=[
                       'colorama>=0.3.7',
                       'gffutils>=0.8.7.1',
+                      'glmnet_py>=0.1.0b1',
                       'joblib>=0.10.3',
                       'matplotlib>=1.5.1',
                       'numpy>=1.11.2',

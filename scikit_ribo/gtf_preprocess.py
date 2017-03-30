@@ -95,7 +95,7 @@ class GtfPreProcess(object):
         codonDic, fastaDic, ntDic = {}, {}, {}
         # iterate
         for header in faiter:
-            key = header.__next__()[1:].strip().split(" ")[0]
+            key = header.__next__()[1:].strip().split(" ")[0].split(":")[0]
             seq = "".join(s.strip() for s in faiter.__next__())
             codons = [seq[i:i+3] for i in range(0, len(seq), 3)]
             nts = list(seq)

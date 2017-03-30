@@ -1,5 +1,6 @@
 colorama>=0.3.7
 gffutils>=0.8.7.1
+glmnet_py>=0.1.0b1
 joblib>=0.10.3
 matplotlib>=1.5.1
 numpy>=1.11.2
