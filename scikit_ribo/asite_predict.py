@@ -13,6 +13,10 @@
 
 from __future__ import print_function, division
 import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+from matplotlib import rcParams
+rcParams.update({'figure.autolayout': True})
 import os
 import sys
 import argparse
@@ -32,10 +36,6 @@ from sklearn.model_selection import GridSearchCV, train_test_split, cross_val_sc
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_selection import SelectFromModel, RFECV
 import glmnet_py.dataprocess as dataprocess
-from matplotlib import rcParams
-rcParams.update({'figure.autolayout': True})
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
 
 
 class VisualizeAsite(object):
