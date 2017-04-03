@@ -130,9 +130,9 @@ class ProcessRnafold(object):
             if file.endswith("dp.ps"):
                 fileNames.append(file)
         # pool and run in parallel
-        cpus = 16 if multiprocessing.cpu_count() > 16 else max(1, multiprocessing.cpu_count() - 1)
+        cpus = 10 if multiprocessing.cpu_count() > 10 else max(1, multiprocessing.cpu_count() - 1)
         pool = multiprocessing.Pool(cpus, maxtasksperchild=2)
-        pool.apply_async(self.loadDpps, fileNames)
+        pool.map(self.loadDpps, fileNames)
         pool.close()
         pool.join()
         sys.stderr.write("[status]\tFinished loading rnafold results for all" + "\n")

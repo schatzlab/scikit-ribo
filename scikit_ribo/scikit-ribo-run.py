@@ -33,6 +33,16 @@ from pyfiglet import figlet_format
 init(strip=not sys.stdout.isatty())
 
 
+def warn(*args, **kwargs):
+    """
+    skip warnings
+    :param args:
+    :param kwargs:
+    :return:
+    """
+    pass
+
+
 def log_status(bam, directory, prefix, out, cv):
     """
     Load data, log status and start
@@ -110,8 +120,6 @@ def asite_module(trainingData, cdsData, rele, prefix, out, directory):
     :return: dataFrame
     """
     # silent
-    def warn(*args, **kwargs):
-        pass
     import warnings
     warnings.warn = warn
     # plot
@@ -121,7 +129,6 @@ def asite_module(trainingData, cdsData, rele, prefix, out, directory):
     # predict a-site
     print("[execute]\tstart the process of a-site prediction", file=sys.stderr)
     classifier = "rf"
-    print(directory)
     model = PredictAsite(trainingData, cdsData, classifier, rele, prefix, out, directory)
     print("[execute]\tperform model training and cross validation on the training data", file=sys.stderr)
     model.rfFit()
@@ -146,8 +153,6 @@ def te_module(dataFrame, unmap, out, lambda_min):
     :return: None
     """
     # silent
-    def warn(*args, **kwargs):
-        pass
     import warnings
     warnings.warn = warn
     if unmap:

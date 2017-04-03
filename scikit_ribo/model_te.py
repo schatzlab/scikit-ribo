@@ -59,11 +59,11 @@ class ModelTE(object):
         codons = self.df[["gene", "codon_idx"]]
         codonLen = codons.groupby('gene').max().reset_index()
         codonLen.columns = ['gene', "numCodons"]
-        codonLen["numCodons"] -= 8 # removed the appended 3 utr files
+        codonLen["numCodons"] -= 8  # removed the appended 3 utr codons
         self.df = pd.merge(self.df, codonLen, how="left", on=["gene"])
         self.df.rename(columns={'pair_prob': 'downstreamSL'}, inplace=True)
         self.df = self.df.dropna()
-        self.df = self.df[(self.df["ribosome_count"] > 0)] # check me
+        self.df = self.df[(self.df["ribosome_count"] > 0)]
 
     def filterDf(self):
         """
@@ -77,7 +77,8 @@ class ModelTE(object):
         self.df = self.df[(self.df["codon_idx"] <= self.df["numCodons"]) & (self.df["codon_idx"] > 0)]
         self.df = self.df[((self.df["codon"] != 'TAG') & (self.df["codon"] != 'TAA') & (self.df["codon"] != 'TGA'))]
         # 2. exclude genes w/ low Ribo TPM
-        genes = self.df[["gene", "codon_idx", "ribosome_count"]].groupby("gene").sum().ribosome_count.reset_index(name="riboCnt")
+        subCols = ["gene", "codon_idx", "ribosome_count"]
+        genes = self.df[subCols].groupby("gene").sum().ribosome_count.reset_index(name="riboCnt")
         codonLen = self.df[["gene", "numCodons"]].drop_duplicates(subset=["gene"])
         genes = pd.merge(genes, codonLen, on="gene")
         genes["rpkm"] = genes["riboCnt"] * 1000000000 / (np.sum(genes["riboCnt"]) * genes["numCodons"] * 3)
@@ -97,9 +98,9 @@ class ModelTE(object):
         geneFilter = geneFilter[(geneFilter["keep"] == True)][['gene']]
         self.df = pd.merge(self.df, geneFilter, how="inner", on=["gene"])
         # summary statistics of the data-frame
-        numGenes = np.unique(self.df.gene).shape[0]
+        numGenesRemained = np.unique(self.df.gene).shape[0]
         sys.stderr.write("[status]\tNumber of observations after filtering:\t" + str(self.df.shape[0]) + "\n")
-        sys.stderr.write("[status]\tNumber of genes after filtering:\t" + str(numGenes) + "\n")
+        sys.stderr.write("[status]\tNumber of genes after filtering:\t" + str(numGenesRemained) + "\n")
 
     def varScaling(self):
         """
@@ -113,7 +114,7 @@ class ModelTE(object):
         tmp.drop(["logTPM", "TPM"], axis=1, inplace=True)
         self.df = pd.merge(self.df, tmp, how='left', on=["gene"])
         # remove unnecessary cols and NAs
-        self.df = self.df.drop(["TPM", "numCodons"], axis=1).dropna() # avg_prob
+        self.df = self.df.drop(["TPM", "numCodons"], axis=1).dropna()
 
     def sparseDfToCsc(self, df):
         """
@@ -135,24 +136,25 @@ class ModelTE(object):
         :return:
         """
         # get col names
-        numGenes, numCodons = len(self.df.gene.unique()), len(self.df.codon.unique())
+        numGenesToInfer, numCodonsToInfer = len(self.df.gene.unique()), len(self.df.codon.unique())
         cateVars = pd.get_dummies(self.df[["gene", "codon"]], sparse=True)
         cateVarsNames = list(cateVars.columns.values)
-        varsNames = cateVarsNames + ["secondary_structure"]
+        varsNamesLst = cateVarsNames + ["secondary_structure"]
         # prepare input arrays
         cateVars = dataprocess().sparseDf(cateVars)
         downstreamSL = np.array(self.df["downstreamSL"].as_matrix().reshape(int(len(self.df["downstreamSL"])), 1),
                                 dtype=np.float64)
-        X = sparse.hstack([cateVars, downstreamSL], format="csc", dtype=np.float64)
-        y = np.array(self.df["ribosome_count"], dtype=np.float64)
-        offsets = np.array(self.df["logTPM_scaled"], dtype=np.float64).reshape(int(len(self.df["logTPM_scaled"])), 1)
-        return X, y, offsets, numCodons, numGenes, varsNames
+        sparseX = sparse.hstack([cateVars, downstreamSL], format="csc", dtype=np.float64)
+        sparseY = np.array(self.df["ribosome_count"], dtype=np.float64)
+        offsetsArr = np.array(self.df["logTPM_scaled"], dtype=np.float64).reshape(int(len(self.df["logTPM_scaled"])), 1)
+        return sparseX, sparseY, offsetsArr, numCodonsToInfer, numGenesToInfer, varsNamesLst
 
     def glmnetFit(self, X, y, offsets, numCodons, numGenes, varsNames, lambda_min):
         """
 
         :param X:
         :param y:
+        :param offsets:
         :param numCodons:
         :param numGenes:
         :param varsNames:
@@ -161,24 +163,30 @@ class ModelTE(object):
         """
         # fit the model
         if not lambda_min:
-            fit = cvglmnet(x=X.copy(), y=y.copy(), family='poisson', offset=offsets, alpha=0, parallel=True, lambda_min=np.array([0]))
-            coefs = cvglmnetCoef(fit, s=fit['lambda_min']) # lambda_min lambda_1se
+            fit = cvglmnet(x=X.copy(), y=y.copy(), family='poisson',
+                           offset=offsets, alpha=0, parallel=True, lambda_min=np.array([0]))
+            coefs = cvglmnetCoef(fit, s=fit['lambda_min'])  # lambda_min lambda_1se
         else:
-            fit = glmnet(x=X.copy(), y=y.copy(), family='poisson', offset=offsets, alpha=0, lambda_min=np.array([0]))
+            fit = glmnet(x=X.copy(), y=y.copy(), family='poisson',
+                         offset=offsets, alpha=0, lambda_min=np.array([0]))
             coefs = glmnetCoef(fit, s=scipy.float64([lambda_min]))
         # parse and scale coefficients
         intercept = coefs[0][0]
-        geneBetas = pd.DataFrame([[varsNames[i-1].split("_")[1], coefs[i][0]] for i in range(1, numGenes+1)], columns=["gene", "beta"])
+        geneBetas = pd.DataFrame([[varsNames[i-1].split("_")[1], coefs[i][0]]
+                                  for i in range(1, numGenes+1)], columns=["gene", "beta"])
         geneBetas["log2_TE"] = (geneBetas["beta"] - np.median(geneBetas["beta"])) / np.log(2)
         geneBetas.drop(["beta"], inplace=True, axis=1)
-        codonBetas = pd.DataFrame([[varsNames[i-1].split("_")[1], coefs[i][0]] for i in range(numGenes+1, numGenes + numCodons + 1)], columns=["codon", "beta"])
+        codonBetas = pd.DataFrame([[varsNames[i-1].split("_")[1], coefs[i][0]]
+                                   for i in range(numGenes+1, numGenes + numCodons + 1)], columns=["codon", "beta"])
         codonBetas["log_codon_dwell_time"] = (codonBetas["beta"] - np.median(codonBetas["beta"]))
         codonBetas["codon_dwell_time"] = np.exp(codonBetas["log_codon_dwell_time"])
         codonBetas.drop(["beta", "log_codon_dwell_time"], inplace=True, axis=1)
         downstreamSLBeta = coefs[numGenes + numCodons + 1][0]
         #  export to local
-        geneBetas.to_csv(path_or_buf= self.output + '/genesTE.csv', sep='\t', header=True, index=False, float_format='%.4f')
-        codonBetas.to_csv(path_or_buf= self.output + '/codons.csv', sep='\t', header=True, index=False, float_format='%.4f')
+        geneBetas.to_csv(path_or_buf=self.output + '/genesTE.csv', sep='\t',
+                         header=True, index=False, float_format='%.4f')
+        codonBetas.to_csv(path_or_buf=self.output + '/codons.csv', sep='\t',
+                          header=True, index=False, float_format='%.4f')
         # print results
         if lambda_min:
             sys.stderr.write("[results]\tpre-defined lambda: " + str(lambda_min) + "\n")
