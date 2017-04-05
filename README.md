@@ -1,8 +1,10 @@
 ![logo](logo.png)
 
-# *scikit-ribo* 
+## *scikit-ribo*
 
 #### - Accurate inference and robust modelling of translation dynamics at codon resolution with Riboseq data
+#### https://github.com/hanfang/scikit-ribo
+
 --------
 
 ## Contact
@@ -42,7 +44,7 @@ When using `pip install scikit-ribo`, all the following dependencies will be pul
 To install `scikit-ribo`, simply use the below command
     
     pip install scikit-ribo
-
+    
 ## How-to-use
 
 Twp steps:
