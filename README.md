@@ -2,25 +2,27 @@
 
 # *scikit-ribo* 
 
-### - A scikit framework for joint analysis of Riboseq and RNAseq data
+#### - Accurate inference and robust modelling of translation dynamics at codon resolution with Riboseq data
 --------
 
 ## Contact
 
-Han Fang
-hanfang.cshl@gmail.com
+#### Han Fang
+#### Stony Brook University & Cold Spring Harbor Laboratory
+#### Email: hanfang.cshl@gmail.com
 
 ## Requirement: 
-Environment: Python3, Linux
+#### Environment: Python3, Linux
 
-Dependencies:
+Recommend setting up your environment with [Conda](https://conda.io/docs/intro.html)
+
+#### Dependencies:
 bedtools >= 2.26.0
 
 When using `pip install scikit-ribo`, all the following dependencies will be pulled and installed automatically.
 
 | Python package| Version >= |
 | ------------- |:-------------:|
-| conda | 4.2.13 |
 | colorama | 0.3.7 |
 | glmnet-py | 0.1.0b |
 | gffutils | 0.8.7.1 |
@@ -37,7 +39,7 @@ When using `pip install scikit-ribo`, all the following dependencies will be pul
 
 ## Install
 
-Install `scikit-ribo`
+To install `scikit-ribo`, simply use the below command
     
     pip install scikit-ribo
 
@@ -87,9 +89,28 @@ Twp steps:
     -r          setting this flag will enable the RelE mode
     -u U        Un-mappable regions
     ```
+For more information, please refer to the [template shell script](https://github.com/hanfang/scikit-ribo/blob/master/test/run_scikit_ribo.sh) about details of executing the two modules.
 
 ## Introduction
 
+Scikit-ribo has two major modules: Ribosome A-site location prediction, and translation efficiency (TE) inference using a penalized generalized linear model (GLM). 
+
+A complete analysis with scikit-ribo has two major procedures: 
+1) data pre-processing to prepare the ORFs, codons for a genome: `scikit-ribo-build.py`
+2) the actual model training and fitting: `scikit-ribo-run.py`
+
+Inputs:
+1) alignment (bam) of Riboseq reads
+2) gene-level quantification of RNA-seq reads
+3) a gene annotation file (gtf) 
+4) a reference genome (fasta) for the model organism of interest 
+
+Outpus:
+1) TE estimates for the genes
+2) relative elongate rate for 61 sense codons
+3) ribosome profile plots for each gene
+4) Scikit-ribo also has modules to produced diagnostic plots of models and ribosome profile plots for each gene
+
 ## Reference
 
-Preprint coming up
+Fang et al, "Scikit-ribo: Accurate inference and robust modelling of translation dynamics at codon resolution" (Preprint coming up)
