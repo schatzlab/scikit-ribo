@@ -1,107 +1,159 @@
 Metadata-Version: 1.1
 Name: scikit-ribo
-Version: 0.2.1b5
+Version: 0.2.2b1
 Summary: A scikit framework for joint analysis of Riboseq and RNAseq data
 Home-page: https://github.com/hanfang/scikit-ribo
 Author: Han Fang
 Author-email: hanfang.cshl@gmail.com
 License: GPLv2
-Description: ![logo](logo.png)
+Description: Getting Started
+        ###############
         
-        # *scikit-ribo* 
+        This document will show you how to install and run Scikit-ribo.
         
-        ### - A scikit framework for joint analysis of Riboseq and RNAseq data
-        --------
+        What is Scikit-ribo
+        -------------------
         
-        ## Contact
+        Scikit-ribo is an open-source software for accurate genome-wide A-site prediction and translation efficiency
+        inference from Riboseq and RNAseq data.
+        
+        Source Code: https://github.com/hanfang/scikit-ribo
+        
+        Introduction
+        ------------
+        
+        Scikit-ribo has two major modules:
+        
+        - **Ribosome A-site location prediction** using random forest with recursive feature selection
+        
+        - **Translation efficiency inference** using a codon-lvel generalized linear model with ridge penalty
+        
+        A complete analysis with scikit-ribo has two major procedures:
+        
+        - The data pre-processing step to prepare the ORFs, codons for a genome: ``scikit-ribo-build.py``
+        
+        - The actual model training and fitting: ``scikit-ribo-run.py``
+        
+        Detailed workflow
+        -----------------
+        .. image:: /images/methods.png
+           :align: center
+           :scale: 75%
+        
+        Inputs
+        ------
+        - The alignment of Riboseq reads (bam)
+        - Gene-level quantification of RNA-seq reads (from either Salmon or Kallisto)
+        - A gene annotation file (gtf)
+        - A reference genome for the model organism of interest (fasta)
+        
+        
+        Output
+        ------
+        - Translation efficiency estimates for the genes
+        - Translation elongation rate for 61 sense codons
+        - Ribosome profile plots for each gene
+        - Diagnostic plots of the models
+        
+        
+        Cite
+        ----
+        
+        Fang et al, "Scikit-ribo: Accurate inference and robust modelling of translation dynamics at codon resolution" (Preprint coming up)
+        
+        Contact
+        -------
         
         Han Fang
-        hanfang.cshl@gmail.com
         
-        ## Requirement: 
-        Environment: Python3, Linux
+        Stony Brook University & Cold Spring Harbor Laboratory
         
-        Dependencies:
-        bedtools >= 2.26.0
+        Email: hanfang.cshl@gmail.comRequirement
+        ###########
         
-        When using `pip install scikit-ribo`, all the following dependencies will be pulled and installed automatically.
+        Environment
+        -----------
         
-        | Python package| Version >= |
-        | ------------- |:-------------:|
-        | conda | 4.2.13 |
-        | colorama | 0.3.7 |
-        | glmnet-py | 0.1.0b |
-        | gffutils | 0.8.7.1 |
-        | matplotlib | 1.5.1 |
-        | numpy | 1.11.2 |
-        | pandas | 0.19.2 |
-        | pybedtools | 0.7.8 | 
-        | pyfiglet | 0.7.5 | 
-        | pysam | 0.9.1.4 |
-        | scikit-learn | 0.18 |
-        | scipy | 0.18.1 |
-        | seaborn | 0.7.0 |
-        | termcolor | 1.1.0 |
+        - Python3
+        - Linux
+        - Recommend setting up your environment with `Conda <https://conda.io/docs/index.html>`_
         
-        ## Install
+        Dependencies
+        ------------
         
-        Install `scikit-ribo`
-            
+        - Command-line pacakges:
+        
+        +----------------+------------+
+        | Python package | Version >= |
+        +================+============+
+        | bedtools       | 2.26.0     |
+        +----------------+------------+
+        
+        - Python package:
+        
+        +----------------+------------+
+        | Python package | Version >= |
+        +================+============+
+        | colorama       | 0.3.7      |
+        +----------------+------------+
+        | glmnet_py      |0.1.0b      |
+        +----------------+------------+
+        | gffutils       | 0.8.7.1    |
+        +----------------+------------+
+        | matplotlib     | 1.5.1      |
+        +----------------+------------+
+        | numpy          | 1.11.2     |
+        +----------------+------------+
+        | pandas         | 0.19.2     |
+        +----------------+------------+
+        | pybedtools     | 0.7.8      |
+        +----------------+------------+
+        | pyfiglet       | 0.7.5      |
+        +----------------+------------+
+        | pysam          | 0.9.1.4    |
+        +----------------+------------+
+        | scikit_learn   | 0.18       |
+        +----------------+------------+
+        | scipy          | 0.18.1     |
+        +----------------+------------+
+        | seaborn        | 0.7.0      |
+        +----------------+------------+
+        | termcolor      | 1.1.0      |
+        +----------------+------------+
+        
+        Note: When using pip install scikit-ribo, all the following dependencies will be pulled and installed automatically.
+        
+        Installation
+        ############
+        
+        Options
+        -------
+        There are three options to install Scikit-ribo.
+        
+        
+        1. Install Scikit-ribo with pip::
+        
             pip install scikit-ribo
         
-        ## How-to-use
+        2. Install Scikit-ribo with conda/biocodon::
         
-        Twp steps:
+            Coming up
         
-        - Build index: `scikit-ribo-build.py`
+        3. Compile from source::
         
-        - Fit model:   `scikit-ribo-run.py`
+            git clone https://github.com/hanfang/scikit-ribo.git
+            cd scikit-ribo
+            python setup.py install
         
-        ## Usage
+        Test whether the installation is successful
+        -------------------------------------------
+        Once the installation is successful, you should expect the below if you type::
         
-        1. Build index: `scikit-ribo-build.py`
+            scikit-ribo-run.py
         
-        
-            ```
-            scikit-ribo-build.py -g gtf-file -f fasta-file -p prefix -r rna-fold-folder -t TPM-file -o index-path
-        
-            required arguments:
-            -g G        Gtf file, required
-            -f F        Fasta file, required
-            -p P        Prefix to use, required
-            -r R        Rnafold folder, required
-            -t T        TPM of RNAseq sample, required
-            -o O        Output path of the built indexes, required
-            ```
-        
-        
-        2. Fit model:  `scikit-ribo-run.py`
-        
-            ```
-            scikit-ribo-run.py -i bam-file -f index-path -p prefix -o output-path
-        
-            required arguments:
-            -i I        Input bam file
-            -f F        path to the Folder of BED/index files generated by the pre-processing module
-            -p P        Prefix for BED/index files
-            -o O        Output path, recommend using the sample id
-        
-            optional arguments:    
-            -h, --help  show this help message and exit
-            -q Q        minimum mapQ allowed, Default: 20
-            -s S        Shortest read length allowed, Default: 10
-            -l L        Longest read length allowed, Default: 35
-            -c          enable cross validation for glmnet
-            -r          setting this flag will enable the RelE mode
-            -u U        Un-mappable regions
-            ```
-        
-        ## Introduction
-        
-        ## Reference
-        
-        Preprint coming up
-        
+        .. image:: /images/successful_installation.png
+           :align: center
+           :scale: 75%
 Keywords: bioinformatics genomics glm glmnet ridge riboseq
 Platform: UNKNOWN
 Classifier: Development Status :: 4 - Beta

@@ -10,14 +10,14 @@ if sys.version_info.major != 3:
 
 setup(
     name='scikit_ribo',
-    version='0.2.1b5',
+    version='0.2.2b1',
     description = 'A scikit framework for joint analysis of Riboseq and RNAseq data',
-    long_description=open('README.md').read(),
+    long_description=open('pypi_readme.rst').read(),
     url="https://github.com/hanfang/scikit-ribo",
     author = 'Han Fang',
     author_email = 'hanfang.cshl@gmail.com',
     license='GPLv2',
-    scripts=['scikit_ribo/scikit-ribo-run.py','scikit_ribo/scikit-ribo-build.py'],
+    scripts=['scikit_ribo/scikit-ribo-run.py','scikit_ribo/scikit-ribo-build.py','scikit_ribo/plot_ribo.py'],
     packages=find_packages(),
     install_requires=[
                       'colorama>=0.3.7',
