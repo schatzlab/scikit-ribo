@@ -239,6 +239,7 @@ class PredictAsite(object):
         riboCnt["ribosome_count"].fillna(value=0, inplace=True)
         riboCnt["ribosome_count"] = riboCnt["ribosome_count"].astype(int)
         riboCnt = riboCnt.sort_values(by=["chrom", "start", "end"])
+        riboCnt.to_csv(path_or_buf=self.output + "/" + "riboseq_input.txt", sep='\t', header=True, index=False)
         return riboCnt
 
 
