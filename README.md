@@ -1,6 +1,9 @@
 ![logo](docs/images/logo.png)
 
-## *scikit-ribo*
+## *scikit-ribo* 
+[![PyPI version](https://badge.fury.io/py/scikit-ribo.svg)](https://badge.fury.io/py/scikit-ribo)
+[![GPL Licence](https://badges.frapsoft.com/os/gpl/gpl.svg?v=103)](https://opensource.org/licenses/GPL-3.0/)
+[![Documentation Status](https://readthedocs.org/projects/scikit-ribo/badge/?version=latest)](http://scikit-ribo.readthedocs.io/en/latest/?badge=latest)
 
 #### - Accurate inference and robust modelling of translation dynamics at codon resolution with Riboseq data
 #### https://github.com/hanfang/scikit-ribo
