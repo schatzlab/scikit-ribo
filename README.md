@@ -5,6 +5,8 @@
 #### - Accurate inference and robust modelling of translation dynamics at codon resolution with Riboseq data
 #### https://github.com/hanfang/scikit-ribo
 
+|build-status| |docs|
+
 --------
 
 ## Contact
