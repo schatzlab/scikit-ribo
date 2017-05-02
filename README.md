@@ -1,4 +1,4 @@
-![logo](logo.png)
+![logo](docs/images/logo.png)
 
 ## *scikit-ribo*
 
@@ -19,7 +19,10 @@
 Recommend setting up your environment with [Conda](https://conda.io/docs/intro.html)
 
 #### Dependencies:
-bedtools >= 2.26.0
+
+| Dependencies | Version >= |
+| ------------- |:-------------:|
+| bedtools | 2.26.0 |
 
 When using `pip install scikit-ribo`, all the following dependencies will be pulled and installed automatically.
 
@@ -102,16 +105,16 @@ A complete analysis with scikit-ribo has two major procedures:
 2) the actual model training and fitting: `scikit-ribo-run.py`
 
 Inputs:
-1) alignment (bam) of Riboseq reads
-2) gene-level quantification of RNA-seq reads
-3) a gene annotation file (gtf) 
-4) a reference genome (fasta) for the model organism of interest 
+1) The alignment of Riboseq reads (bam)
+2) Gene-level quantification of RNA-seq reads (from either Salmon or Kallisto)
+3) A gene annotation file (gtf)
+4) A reference genome for the model organism of interest (fasta)
 
 Outpus:
-1) TE estimates for the genes
-2) relative elongate rate for 61 sense codons
-3) ribosome profile plots for each gene
-4) Scikit-ribo also has modules to produced diagnostic plots of models and ribosome profile plots for each gene
+1) Translation efficiency estimates for the genes
+2) Translation elongation rate for 61 sense codons
+3) Ribosome profile plots for each gene
+4) Diagnostic plots of the models
 
 ## Reference
 
