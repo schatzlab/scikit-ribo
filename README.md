@@ -7,7 +7,7 @@
 
 --------
 ## Documentation
-Read the Docs: [![Documentation Status](https://readthedocs.org/projects/scikit-ribo/badge/?version=latest)](http://scikit-ribo.readthedocs.io/en/latest/?badge=latest) or click [me](scikit-ribo.readthedocs.io)
+Read the Docs: [![Documentation Status](https://readthedocs.org/projects/scikit-ribo/badge/?version=latest)](http://scikit-ribo.readthedocs.io/en/latest/?badge=latest) or click [me](http://scikit-ribo.readthedocs.io/en/latest/)
 
 ## Contact
 
