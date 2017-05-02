@@ -3,14 +3,23 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to scikit-ribo's documentation!
+Welcome to Scikit-ribo's documentation!
 =======================================
 
+.. image:: /images/logo.png
+   :align: center
+   :scale: 75%
+
+Contents:
+---------
+
 .. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+   :maxdepth: 4
 
-
+   intro.rst
+   building.rst
+   usage.rst
+   contact.rst
 
 Indices and tables
 ==================
