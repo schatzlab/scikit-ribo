@@ -63,6 +63,7 @@ def log_status(bam, directory, prefix, out, cv):
     os.system(cmd)
     print("[status]\tProcessing the input bam file: " + bam, file=sys.stderr)
     print("[setting]\tOutput path: " + out, file=sys.stderr)
+    print("[setting]\tOutput path: " + out, flush=True)
     print("[status]\tReading the start codon BED file: " + start, file=sys.stderr)
     print("[status]\tReading the open reading frame codon BED file: " + cds, file=sys.stderr)
     print("[status]\tReading the position-phase file: " + posIdx, file=sys.stderr)

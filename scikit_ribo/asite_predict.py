@@ -116,7 +116,7 @@ class PredictAsite(object):
         self.reducedClf = RandomForestClassifier(n_jobs=cpus, max_depth=10, min_samples_split=100)
         self.reducedClf = self.reducedClf.fit(sltX, self.y)
         # cross validation
-        scores = cross_val_score(self.reducedClf, sltX, self.y, cv=10)
+        scores = cross_val_score(self.reducedClf, sltX, self.y, cv=10, scoring='accuracy')
         print("[result]\tAccuracy: %0.3f (+/- %0.3f)" % (scores.mean(), scores.std() * 2), flush=True)
 
     def rfImportance(self):
@@ -143,13 +143,6 @@ class PredictAsite(object):
         sltCdsX = self.selector.transform(uniqFeaturesArr)
         uniqFeatures["asite"] = self.reducedClf.predict(sltCdsX)
         self.cds = pd.merge(self.cds, uniqFeatures, how="left", on=self.colNames)
-        # collapseArr = np.array(pd.get_dummies(collapse)) # not needed
-        # numpy arr for cds
-        # cdsX = np.array(pd.get_dummies(self.cds[self.colNames]))
-        # cdsX = sparse.csr_matrix(np.array(pd.get_dummies(self.cds[self.colNames])))
-        # selected a subset of features and predict a-site
-        # sltcdsX = self.selector.transform(cdsX)
-        # self.cds["asite"] = self.reducedClf.predict(sltcdsX)
 
     def svmFit(self):
         # grid search
@@ -212,27 +205,48 @@ class PredictAsite(object):
     def recoverAsite(self):
         # adjust by the a-site location and calculate the a-site location in nt space, -1 is the missing value
         if not self.RelE:
-            self.cds['a_start'] = np.where(self.cds['gene_strand'] == '+', (self.cds['start'] + self.cds['asite']),
-                                           (-1)).astype(int)
-            self.cds['a_end'] = np.where(self.cds['gene_strand'] == '+', (self.cds['a_start'] + 3),
-                                         (self.cds['end'] - self.cds['asite'])).astype(int)
-            self.cds['a_start'] = np.where(self.cds['gene_strand'] == '-', (self.cds['a_end'] - 3),
-                                           (self.cds['a_start'])).astype(int)
+            # phase by strand
+            self.cds.loc[self.cds['gene_strand'] == '+', "a_start"] = self.cds['start'] + self.cds['asite']
+            self.cds.loc[self.cds['gene_strand'] == '+', "a_end"  ] = self.cds['a_start'] + 3
+            self.cds.loc[self.cds['gene_strand'] == '-', "a_end"] = self.cds['end'] - self.cds['asite']
+            self.cds.loc[self.cds['gene_strand'] == '-', "a_start"] = self.cds['a_end'] - 3
+            #self.cds['a_start'] = np.where(self.cds['gene_strand'] == '+', (self.cds['start'] + self.cds['asite']),
+            #                               (-1)).astype(int)
+            #self.cds['a_end'] = np.where(self.cds['gene_strand'] == '+', (self.cds['a_start'] + 3),
+            #                             (self.cds['end'] - self.cds['asite'])).astype(int)
+            #self.cds['a_start'] = np.where(self.cds['gene_strand'] == '-', (self.cds['a_end'] - 3),
+            #                               (self.cds['a_start'])).astype(int)
         else:
-            self.cds['a_start'] = np.where(self.cds['gene_strand'] == '+', (self.cds['end'] - self.cds['asite']),
-                                           (-1)).astype(int)
-            self.cds['a_end'] = np.where(self.cds['gene_strand'] == '+', (self.cds['a_start'] + 3),
-                                         (self.cds['start'] + self.cds['asite'])).astype(int)
-            self.cds['a_start'] = np.where(self.cds['gene_strand'] == '-', (self.cds['a_end'] - 3),
-                                           (self.cds['a_start'])).astype(int)
+            # phase by strand
+            self.cds.loc[self.cds['gene_strand'] == '+', "a_start"] = self.cds['end'] - self.cds['asite']
+            self.cds.loc[self.cds['gene_strand'] == '+', "a_end"] = self.cds['a_start'] + 3
+            self.cds.loc[self.cds['gene_strand'] == '-', "a_end"] = self.cds['start'] + self.cds['asite']
+            self.cds.loc[self.cds['gene_strand'] == '-', "a_start"] = self.cds['a_end'] - 3
+            #self.cds['a_start'] = np.where(self.cds['gene_strand'] == '+', (self.cds['end'] - self.cds['asite']),
+            #                               (-1)).astype(int)
+            #self.cds['a_end'] = np.where(self.cds['gene_strand'] == '+', (self.cds['a_start'] + 3),
+            #                             (self.cds['start'] + self.cds['asite'])).astype(int)
+            #self.cds['a_start'] = np.where(self.cds['gene_strand'] == '-', (self.cds['a_end'] - 3),
+            #                               (self.cds['a_start'])).astype(int)
         # remove start/end for reads
         self.cds.drop(['start', 'end'], axis=1, inplace=True)
         # use to group by command to retrieve ribosome coverage
-        cnt = self.cds.groupby(["chrom", "a_start", "a_end", "strand"])
-        cnt = cnt.size().reset_index(name="ribosome_count")
-        # left outer join the null df and the group-by_df_count to get ribosome counts at each position
+        reads = self.cds.groupby(["chrom", "a_start", "a_end", "strand"])
+        reads = reads.size().reset_index(name="ribosome_count")
         cdsIdx = pd.read_table(self.cdsIdxFn, header=0)
-        riboCnt = pd.merge(cdsIdx, cnt, how="left",
+        # count mapped reads to the canonical orf
+        orfHits = pd.merge(cdsIdx, reads,
+                           left_on=["chrom", "start", "end", "gene_strand"],
+                           right_on=["chrom", "a_start", "a_end", "strand"])
+        orfHits = orfHits[["chrom", "start", "end", "gene_strand", "ribosome_count"]].drop_duplicates()
+        totalCnt = np.sum(reads.ribosome_count)
+        numOrfHits = np.sum(orfHits.ribosome_count)
+        orfHitsPercentage = numOrfHits / totalCnt * 100
+        print("[result]\tTotal number of Riboseq reads:", str(int(totalCnt)), flush=True)
+        print("[result]\tNumber of reads in canonical ORF:", str(int(numOrfHits)), flush=True)
+        print("[result]\tPercentage of reads in canonical ORF:", str(round(orfHitsPercentage,2)) + "%", flush=True)
+        # left outer join the null df and the group-by_df_count to get ribosome counts at each position
+        riboCnt = pd.merge(cdsIdx, reads, how="left",
                            left_on=["chrom", "start", "end", "gene_strand"],
                            right_on=["chrom", "a_start", "a_end", "strand"])
         riboCnt.drop(['a_start', 'a_end', 'strand'], axis=1, inplace=True)
@@ -251,7 +265,7 @@ if __name__ == '__main__':
     parser.add_argument("-i", help="input folder, required")
     parser.add_argument("-p", help="prefix of index for the CDS region, required")
     parser.add_argument("-c", help="classifier to use, random forest (rf) or svm, optional, default: rf", default="rf")
-    parser.add_argument("-e", help="whether the sample involved RelE, Default: F", default='F', type=str)
+    parser.add_argument("-r", help="whether the sample involved RelE, Default: F", default='F', type=str)
     # check if there is any argument
     if len(sys.argv) <= 1:
         parser.print_usage()
@@ -265,7 +279,7 @@ if __name__ == '__main__':
         cds_fn = args.i + "/riboseq.cds"
         cds_idx = args.i + "/" + args.p + ".codons.df"
         method = args.c
-        rele = False if args.e == 'F' else True
+        rele = False if args.r == 'F' else True
         sys.stderr.write("[execute]\tplotting the a-site location distribution from " + str(asite_fn) + "\n")
         asite = visualize_asite(asite_fn, rele)
         asite.plot()
