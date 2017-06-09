@@ -13,14 +13,14 @@ Detailed usage
 
 - Pre-process: ``scikit-ribo-build.py``::
 
-    scikit-ribo-build.py -g gtf-file -f fasta-file -p prefix -r rna-fold-folder -t TPM-file -o index-path
+    scikit-ribo-build.py -g gtf-file -f fasta-file -p prefix -r rna-fold-file -t TPM-file -o index-path
 
 required arguments::
 
     -g G        Gtf file, required
     -f F        Fasta file, required
     -p P        Prefix to use, required
-    -r R        Rnafold folder, required
+    -r R        Rnafold file, required
     -t T        TPM of RNAseq sample, required
     -o O        Output path of the built indexes, required
 
@@ -48,16 +48,17 @@ optional arguments::
 For more information, please refer to the `template shell script <https://github.com/hanfang/scikit-ribo/blob/master/test/run_scikit_ribo.sh>`_ about details of executing the two modules.
 
 
-Plotting
---------
+Preparing Input Data
+--------------------
 
-- Plot ribosome profile for each gene: ``plot_ribo.py``::
+- RNAfold: ``call_rnafold.py``::
 
-    plot_ribo.py -i /sample/riboseq_input.txt -g all -o <output-path>
+    python call_rnafold.py  -f <prefix>.expandCDS.fasta -r rnafold-binary -p prefix -n num-processes -o output-folder
 
-- Plot ribosome profile for a specific gene ``plot_ribo.py``::
+Resulting file: <output-folder>/<prefix>.rnafold_lbox.txt
+Pre-built files can be also downloaded from here: https://github.com/hanfang/scikit-ribo/tree/master/data/prebuilt_rnafold
 
-    plot_ribo.py -i /sample/riboseq_input.txt -g YLR110C -o <output-path>
+- TPM: Gene-level quatification from Salmon or Kallisto
 
 
 Output format
