@@ -10,7 +10,7 @@ if sys.version_info.major != 3:
 
 setup(
     name='scikit_ribo',
-    version='0.2.2b2',
+    version='0.2.3b1',
     description = 'A scikit framework for joint analysis of Riboseq and RNAseq data',
     long_description=open('pypi_readme.rst').read(),
     url="https://github.com/hanfang/scikit-ribo",

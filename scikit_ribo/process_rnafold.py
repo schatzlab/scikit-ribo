@@ -110,12 +110,13 @@ class ProcessRnafold(object):
         # adding zeros to missing values
         lst = [[i] for i in range(geneLength)]
         fullDf = pd.DataFrame(lst, columns=["pos"])
-        lbox_df = pd.merge(fullDf, lbox_probs, how = "left").fillna(0)
+        lbox_df = pd.merge(fullDf, lbox_probs, how="left").fillna(0)
         lbox_df = lbox_df.sort_values("pos")
         # ubox
-        ubox_df = pd.merge(fullDf, ubox_probs, how = "left").fillna(0)
+        ubox_df = pd.merge(fullDf, ubox_probs, how="left").fillna(0)
         ubox_df = ubox_df.sort_values("pos")
         # save to dic
+        gene = None
         if self.header == "gene":
             gene = geneName
         elif self.header == "split":
@@ -158,7 +159,7 @@ if __name__ == '__main__':
     parser.add_argument("-i", help="input folder of rnafold files, required")
     parser.add_argument("-o", help="output folder, required")
 
-    ## check if there is any argument
+    # check if there is any argument
     if len(sys.argv) <= 1:
         parser.print_usage()
         sys.exit(1)
@@ -180,7 +181,7 @@ if __name__ == '__main__':
         rna.loadAll()
         sys.stderr.write("[status]\tMerging the pairing probabilities into one file" + "\n")
         rna.mergeAll()
-        sys.stderr.write("[status]\tRNAfold processing module finished" + "\n")
+        sys.stderr.write("[status]\tMerging finished" + "\n")
     else:
         sys.stderr.write("[error]\tmissing argument" + "\n")
         parser.print_usage()

@@ -28,13 +28,14 @@ from process_rnafold import ProcessRnafold
 from merge_df import MergeDF
 
 
-def log_status(gtf_fn, ref_fn, prefix, rnafold_dir, tpm_fn, out_dir):
+def log_status(gtf_fn, ref_fn, prefix, rnafold_fn, tpm_fn, out_dir):
     """
     Logging the status
     :param gtf_fn: str, gtf file
     :param ref_fn: str, ref fasta file
     :param prefix: str, prefix
-    :param rnafold_dir: str, rnafold directory
+    :param rnafold_fn: str, rnafold file path
+    :param tpm_fn: str, tpm file path
     :param out_dir: str, output directory
     :return: None
     """
@@ -44,7 +45,7 @@ def log_status(gtf_fn, ref_fn, prefix, rnafold_dir, tpm_fn, out_dir):
     print("[status]\tStarted the pre-processing module", file=sys.stderr)
     print("[status]\tImport the gtf file: " + gtf_fn, file=sys.stderr)
     print("[status]\tImport the ref genome fasta file: " + ref_fn, file=sys.stderr)
-    print("[status]\tImport RNAfold folder: " + rnafold_dir, file=sys.stderr)
+    print("[status]\tImport RNAfold file: " + rnafold_fn, file=sys.stderr)
     print("[status]\tImport TPM file of RNAseq sample: " + tpm_fn, file=sys.stderr)
     print("[setting]\tPrefix to use: " + prefix, file=sys.stderr)
     print("[setting]\tOutput path: " + out_dir, file=sys.stderr)
@@ -78,39 +79,18 @@ def module_gtf(gtf_fn, ref_fn, prefix, out_dir):
     sys.stderr.flush()
 
 
-def module_rnafold(rnafold_dir, prefix, output_dir):
+def module_merge(prefix, tpm_fn, rnafold_fn, out_dir):
     """
-
-    :param rnafold_dir:
-    :param prefix:
-    :param output_dir:
-    :return:
-    """
-    fasta = output_dir + "/" + prefix + ".expandCDS.fasta"
-    rna = ProcessRnafold(fasta, rnafold_dir, prefix, output_dir)
-    print("[status]\tParsing fasta file", file=sys.stderr)
-    rna.loadFa()
-    print("[status]\tParsing the pairing probability file", file=sys.stderr)
-    rna.loadAll()
-    print("[status]\tMerging the pairing probabilities into one file", file=sys.stderr)
-    rna.mergeAll()
-    print("[status]\tRNAfold processing module finished", file=sys.stderr)
-    sys.stderr.flush()
-
-
-def module_merge(prefix, tpm_fn, out_dir):
-    """
-
-    :param prefix:
-    :param tpm_fn:
-    :param out_dir:
+    merge data
+    :param prefix: prefix for the files
+    :param tpm_fn: tmp file name
+    :param rnafold_fn: rnafold file path
+    :param out_dir: output directory
     :return:
     """
     bed = out_dir + "/" + prefix + ".codons.bed"
-    rnafold = out_dir + "/" + prefix + ".rnafold_lbox.txt"
-    tpm = tpm_fn
-    ## execute
-    dat = MergeDF(bed, rnafold, tpm, out_dir)
+    # execute
+    dat = MergeDF(bed, rnafold_fn, tpm_fn, out_dir)
     print("[execute]\tTransforming the dataframe of RNA secondary structure pairing probabilities", file=sys.stderr)
     dat.transformPairProb()
     print("[execute]\tLoading tpm", file=sys.stderr)
@@ -120,21 +100,20 @@ def module_merge(prefix, tpm_fn, out_dir):
     sys.stderr.flush()
 
 
-def scikit_ribo_build(gtf_fn, ref_fn, prefix, rnafold_dir, tpm_fn, out):
+def scikit_ribo_build(gtf_fn, ref_fn, prefix, rnafold_fn, tpm_fn, out):
     """
 
     :param gtf_fn:
     :param ref_fn:
     :param prefix:
-    :param rnafold_dir:
+    :param rnafold_fn:
     :param tpm_fn:
     :param out:
     :return: None
     """
-    log_status(gtf_fn, ref_fn, prefix, rnafold_dir, tpm_fn, out)
+    log_status(gtf_fn, ref_fn, prefix, rnafold_fn, tpm_fn, out)
     module_gtf(gtf_fn, ref_fn, prefix, out)
-    module_rnafold(rnafold_dir, prefix, out)
-    module_merge(prefix, tpm_fn, out)
+    module_merge(prefix, tpm_fn, rnafold_fn, out)
     print("[status]\tPre-processing module finished", file=sys.stderr)
     sys.stderr.flush()
 
@@ -147,7 +126,7 @@ if __name__ == '__main__':
     parser.add_argument("-g", help="Gtf file, required")
     parser.add_argument("-f", help="Fasta file, required")
     parser.add_argument("-p", help="Prefix to use, required")
-    parser.add_argument("-r", help="Rnafold folder, required")
+    parser.add_argument("-r", help="Path to the Rnafold file, required")
     parser.add_argument("-t", help="TPM of RNAseq sample, required")
     parser.add_argument("-o", help="Output path of the built indexes, required")
     # check if there is any argument
