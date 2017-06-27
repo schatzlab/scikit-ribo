@@ -243,6 +243,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-g", help="gtf file, required")
     parser.add_argument("-r", help="fasta file, required")
+    parser.add_argument("-p", help="prefix to use, required")
     parser.add_argument("-o", help="output path, required")
     ## check if there is any argument
     if len(sys.argv) <= 1: 
@@ -251,17 +252,18 @@ if __name__ == '__main__':
     else: 
         args = parser.parse_args()
     ## process the file if the input files exist
-    if (args.g!=None) & (args.r!=None) & (args.o!=None):
+    if (args.g!=None) & (args.r!=None) & (args.o!=None) & (args.p!=None):
         sys.stderr.write("[status]\tReading the input file: " + args.g + "\n")
         gtf = args.g
         ref = args.r
+        prefix = args.p
         output = args.o
         # create output folder
         cmd = 'mkdir -p ' + output
         os.system(cmd)
         ## execute
         sys.stderr.write("[execute]\tStarting the pre-processing module" + "\n")
-        worker = GtfPreProcess(gtf, ref, output)
+        worker = GtfPreProcess(gtf, ref, prefix, output)
         sys.stderr.write("[execute]\tLoading the the gtf file in to sql db" + "\n")
         worker.convertGtf()
         sys.stderr.write("[execute]\tCalculating the length of each chromosome" + "\n")

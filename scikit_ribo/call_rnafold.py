@@ -24,7 +24,7 @@ from itertools import groupby
 from process_rnafold import ProcessRnafold
 
 
-class RunRnafold(object):
+class CallRnafold(object):
     ''' Run RNAfold in parallel
     '''
     def __init__(self, fastaFn, rnafold, prefix, processes, output_dir):
@@ -51,7 +51,7 @@ class RunRnafold(object):
             fa.write(">" + geneName + "\n" + self.fastaDic[geneName] + "\n")
             fa.close()
     
-    def callRnafold(self, geneName):
+    def runRnafold(self, geneName):
         cmd = self.rnafold + ' -i ' + 'fastaFiles/' + geneName + '.fasta' + ' -p --outfile tmpFiles/' + geneName
         os.system(cmd)
         cmd = "mv " + geneName + "*ps tmpFiles/"
@@ -61,7 +61,7 @@ class RunRnafold(object):
         geneNames = self.fastaDic.keys()
         cpus = self.processes if self.processes > multiprocessing.cpu_count() else max(1, multiprocessing.cpu_count()-1)
         pool = multiprocessing.Pool(cpus, maxtasksperchild=2)
-        pool.map(self.callRnafold, geneNames)
+        pool.map(self.runRnafold, geneNames)
         pool.close()
         pool.join()
         print("[status]\tFinished calling rnafold for all.", file=sys.stderr)
@@ -116,7 +116,7 @@ if __name__ == '__main__':
         processes = args.n
         output = args.o
         # run
-        mod = RunRnafold(fasta, rnafold, prefix, processes, output)
+        mod = CallRnafold(fasta, rnafold, prefix, processes, output)
         sys.stderr.write("[status]\tIterate through the fasta file" + "\n")
         mod.fastaIter()
         sys.stderr.write("[status]\tSplitting the fasta file" + "\n")
